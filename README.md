@@ -17,14 +17,88 @@ Initial implementation based on verified capture analysis. The temperature field
 - Provide a systemd unit for always-on Raspberry Pi operation.
 - Include tests for confirmed protocol vectors and marker validation.
 
-## Quick Start
+## Raspberry Pi Installation
+
+Install basic system packages first:
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv
+```
+
+Install and verify these external runtime dependencies before starting the service:
+
+- SDRplay API for your SDRplay receiver.
+- `rtl_433` with SDRplay support.
+- An MQTT broker, for example Mosquitto or Home Assistant MQTT.
+
+Clone the project to the target installation directory:
+
+```bash
+sudo mkdir -p /opt
+cd /opt
+sudo git clone https://github.com/dude2k/InkBird-to-MQTT.git inkbird-ibs-p01r-mqtt
+sudo chown -R "$USER:$USER" /opt/inkbird-ibs-p01r-mqtt
+cd /opt/inkbird-ibs-p01r-mqtt
+```
+
+Create a virtual environment and install the package into it:
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
+pip install --upgrade pip
+pip install .
+```
+
+Create the runtime directories and configuration:
+
+```bash
+sudo useradd --system --home /var/lib/inkbird-ibs-p01r --shell /usr/sbin/nologin inkbird
+sudo mkdir -p /etc/inkbird-ibs-p01r /var/lib/inkbird-ibs-p01r/captures
+sudo cp config.example.yaml /etc/inkbird-ibs-p01r/config.yaml
+sudo chown -R inkbird:inkbird /var/lib/inkbird-ibs-p01r
+sudo chown root:root /etc/inkbird-ibs-p01r/config.yaml
+```
+
+Edit `/etc/inkbird-ibs-p01r/config.yaml` and set at least:
+
+- `mqtt.host`
+- `mqtt.topic`
+- `sdr.device`
+- `sdr.capture_dir`
+- `sdr.start_rtl433: true` if the service should start `rtl_433` itself
+
+Install and start the systemd service:
+
+```bash
+sudo cp systemd/inkbird-ibs-p01r-mqtt.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now inkbird-ibs-p01r-mqtt.service
+sudo systemctl status inkbird-ibs-p01r-mqtt.service
+```
+
+Follow logs:
+
+```bash
+journalctl -u inkbird-ibs-p01r-mqtt.service -f
+```
+
+## Local Quick Start
+
+For testing or development on a cloned checkout:
+
+```bash
+git clone https://github.com/dude2k/InkBird-to-MQTT.git
+cd InkBird-to-MQTT
+python -m venv .venv
+. .venv/bin/activate
+pip install --upgrade pip
 pip install -e .
 cp config.example.yaml config.yaml
 ```
+
+`pip install -e .` is an editable developer install. For a Raspberry Pi service install, prefer `pip install .` and rerun it after `git pull` updates.
 
 Decode one file:
 
@@ -95,4 +169,3 @@ python -m unittest discover -s tests
 - [Decoder details](docs/DECODER.md)
 - [SDR setup](docs/SDR_SETUP.md)
 - [MQTT payloads](docs/MQTT.md)
-
