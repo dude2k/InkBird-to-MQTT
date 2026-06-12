@@ -18,6 +18,7 @@ Initial implementation based on verified capture analysis. The temperature field
 - Log periodic capture statistics and warn when no successful decode is seen for a configured time.
 - Restart `rtl_433` automatically if the capture process exits.
 - Provide `status` and `doctor` commands for installation diagnostics.
+- Warn about unknown config keys to catch typos.
 - Provide a systemd unit for always-on Raspberry Pi operation.
 - Include tests for confirmed protocol vectors and marker validation.
 
@@ -114,6 +115,14 @@ Check the effective config and run installation diagnostics:
 inkbird-ibs-p01r-mqtt status --config /etc/inkbird-ibs-p01r/config.yaml
 inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
 ```
+
+`doctor` uses `--service-user inkbird` by default for permission hints. If your systemd unit runs as another user, pass that user explicitly:
+
+```bash
+inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml --service-user YOUR_USER
+```
+
+Unknown config keys are reported as warnings, so typos such as `tls_enable` instead of `tls_enabled` are visible instead of being silently ignored.
 
 ## Local Quick Start
 
@@ -398,6 +407,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Changelog
 
+- `0.5.0`: Add config typo warnings and clearer `doctor` service-user permission hints.
 - `0.4.0`: Add optional MQTT over TLS/MQTTS support and TLS checks in `doctor`.
 - `0.3.0`: Add scalar MQTT topics, `status`/`doctor`, startup effective-config logging, and GitHub Actions CI.
 - `0.2.0`: Improve capture cleanup, service observability, and internal `rtl_433` restart handling.

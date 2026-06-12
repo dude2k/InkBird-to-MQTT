@@ -79,6 +79,14 @@ Run deeper checks for MQTT TCP reachability, capture directory access, and the `
 inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
 ```
 
+`doctor` uses `--service-user inkbird` by default when it suggests a permission-check command. If your systemd unit uses a different `User=`, pass it explicitly:
+
+```bash
+inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml --service-user YOUR_USER
+```
+
+Unknown config keys are reported as warnings to make configuration typos visible.
+
 ## Raspberry Pi Notes
 
 Install and verify the SDRplay API and `rtl_433` before enabling the systemd service. The service user must be able to access the SDR device and write to the capture directory.

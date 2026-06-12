@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import getpass
 import os
+import shlex
 import shutil
 import socket
 import ssl
@@ -19,6 +21,7 @@ class DiagnosticResult:
     ok: bool
     detail: str
     required: bool = True
+    hint: str | None = None
 
     @property
     def status(self) -> str:
@@ -77,10 +80,15 @@ def run_status_checks(config: AppConfig) -> list[DiagnosticResult]:
     ]
 
 
-def run_doctor_checks(config: AppConfig) -> list[DiagnosticResult]:
+def run_doctor_checks(
+    config: AppConfig,
+    service_user: str | None = "inkbird",
+    config_path: str | Path | None = None,
+    executable: str | None = None,
+) -> list[DiagnosticResult]:
     results = [
         *run_status_checks(config),
-        _capture_dir_writable_check(config),
+        _capture_dir_writable_check(config, service_user=service_user, config_path=config_path, executable=executable),
     ]
     if config.mqtt.tls_enabled:
         results.append(_mqtt_tls_files_check(config))
@@ -94,7 +102,12 @@ def run_doctor_checks(config: AppConfig) -> list[DiagnosticResult]:
 
 
 def format_results(results: list[DiagnosticResult]) -> str:
-    return "\n".join(f"[{result.status}] {result.name}: {result.detail}" for result in results)
+    lines: list[str] = []
+    for result in results:
+        lines.append(f"[{result.status}] {result.name}: {result.detail}")
+        if result.hint:
+            lines.append(f"  hint: {result.hint}")
+    return "\n".join(lines)
 
 
 def exit_code_for_results(results: list[DiagnosticResult]) -> int:
@@ -129,7 +142,12 @@ def _capture_dir_check(config: AppConfig) -> DiagnosticResult:
     return DiagnosticResult("capture_dir", False, detail, required=False)
 
 
-def _capture_dir_writable_check(config: AppConfig) -> DiagnosticResult:
+def _capture_dir_writable_check(
+    config: AppConfig,
+    service_user: str | None = None,
+    config_path: str | Path | None = None,
+    executable: str | None = None,
+) -> DiagnosticResult:
     path = Path(config.sdr.capture_dir)
     if not path.exists():
         return DiagnosticResult(
@@ -137,9 +155,15 @@ def _capture_dir_writable_check(config: AppConfig) -> DiagnosticResult:
             False,
             f"{path} does not exist yet; start the service or create it with matching permissions",
             required=False,
+            hint=_service_user_doctor_hint(service_user, config_path, executable),
         )
     if not os.access(path, os.R_OK | os.W_OK | os.X_OK):
-        return DiagnosticResult("capture_dir_writable", False, f"{path} is not readable/writable by this user")
+        return DiagnosticResult(
+            "capture_dir_writable",
+            False,
+            f"{path} is not readable/writable by this user",
+            hint=_service_user_doctor_hint(service_user, config_path, executable),
+        )
     return DiagnosticResult("capture_dir_writable", True, str(path))
 
 
@@ -225,6 +249,27 @@ def _mqtt_tls_check(config: AppConfig) -> DiagnosticResult:
     if config.mqtt.tls_insecure:
         detail += " insecure_verification=true"
     return DiagnosticResult("mqtt_tls", True, detail)
+
+
+def _service_user_doctor_hint(
+    service_user: str | None,
+    config_path: str | Path | None,
+    executable: str | None,
+) -> str | None:
+    if not service_user:
+        return None
+    try:
+        if getpass.getuser() == service_user:
+            return None
+    except Exception:
+        pass
+
+    command = ["sudo", "-u", service_user, executable or "inkbird-ibs-p01r-mqtt", "doctor"]
+    if config_path is not None:
+        command.extend(["--config", str(config_path)])
+    return "The systemd unit usually runs as the service user. Re-run this check with: " + " ".join(
+        shlex.quote(part) for part in command
+    )
 
 
 def _nearest_existing_parent(path: Path) -> Path:

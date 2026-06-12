@@ -123,7 +123,12 @@ def command_doctor(args: argparse.Namespace) -> int:
     for line in effective_config_lines(config):
         print(f"  {line}")
     print()
-    results = run_doctor_checks(config)
+    results = run_doctor_checks(
+        config,
+        service_user=args.service_user,
+        config_path=args.config,
+        executable=sys.argv[0],
+    )
     print(format_results(results))
     return exit_code_for_results(results)
 
@@ -162,6 +167,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor", help="run deeper checks for MQTT, capture directory, and rtl_433")
     doctor.add_argument("--config", type=Path, required=True)
+    doctor.add_argument(
+        "--service-user",
+        default="inkbird",
+        help="systemd service user used for permission hints, default: inkbird",
+    )
     doctor.set_defaults(func=command_doctor)
 
     return parser

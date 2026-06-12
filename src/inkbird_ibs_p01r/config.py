@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
+
+
+class ConfigWarning(UserWarning):
+    pass
 
 
 @dataclass(frozen=True)
@@ -88,6 +93,41 @@ class AppConfig:
     logging: LoggingConfig = LoggingConfig()
 
 
+CONFIG_SECTIONS: dict[str, type] = {
+    "device": DeviceConfig,
+    "sdr": SDRConfig,
+    "decoder": DecoderConfig,
+    "mqtt": MQTTConfig,
+    "logging": LoggingConfig,
+}
+
+
+def find_unknown_config_keys(raw: Mapping[str, Any]) -> list[str]:
+    unknown: list[str] = []
+    for key, value in raw.items():
+        section_cls = CONFIG_SECTIONS.get(key)
+        if section_cls is None:
+            unknown.append(str(key))
+            continue
+        if value is None or not isinstance(value, Mapping):
+            continue
+
+        allowed = {field.name for field in fields(section_cls)}
+        for section_key in value:
+            if section_key not in allowed:
+                unknown.append(f"{key}.{section_key}")
+    return unknown
+
+
+def warn_unknown_config_keys(raw: Mapping[str, Any], config_path: Path) -> None:
+    for key in find_unknown_config_keys(raw):
+        warnings.warn(
+            f"unknown config key ignored in {config_path}: {key}",
+            ConfigWarning,
+            stacklevel=3,
+        )
+
+
 def _filter_dataclass_values(cls: type, values: Mapping[str, Any]) -> dict[str, Any]:
     allowed = {field.name for field in fields(cls)}
     return {key: value for key, value in values.items() if key in allowed}
@@ -107,6 +147,15 @@ def _as_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _section_values(raw: Mapping[str, Any], section: str, config_path: Path) -> Mapping[str, Any]:
+    values = raw.get(section, {})
+    if values is None:
+        return {}
+    if not isinstance(values, Mapping):
+        raise ValueError(f"config section {section!r} must be a mapping: {config_path}")
+    return values
+
+
 def load_config(path: str | Path | None = None) -> AppConfig:
     config = AppConfig()
     if path is None:
@@ -119,18 +168,20 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     if not isinstance(raw, Mapping):
         raise ValueError(f"config root must be a mapping: {config_path}")
 
-    sdr_values = dict(raw.get("sdr", {}) or {})
+    warn_unknown_config_keys(raw, config_path)
+
+    sdr_values = dict(_section_values(raw, "sdr", config_path))
     if "keep_failed_files" in sdr_values:
         keep_failed = _as_bool(sdr_values["keep_failed_files"])
         sdr_values.setdefault("keep_no_hit_files", keep_failed)
         sdr_values.setdefault("keep_error_files", keep_failed)
 
     return AppConfig(
-        device=_merge_dataclass(config.device, raw.get("device", {}) or {}),
+        device=_merge_dataclass(config.device, _section_values(raw, "device", config_path)),
         sdr=_merge_dataclass(config.sdr, sdr_values),
-        decoder=_merge_dataclass(config.decoder, raw.get("decoder", {}) or {}),
-        mqtt=_merge_dataclass(config.mqtt, raw.get("mqtt", {}) or {}),
-        logging=_merge_dataclass(config.logging, raw.get("logging", {}) or {}),
+        decoder=_merge_dataclass(config.decoder, _section_values(raw, "decoder", config_path)),
+        mqtt=_merge_dataclass(config.mqtt, _section_values(raw, "mqtt", config_path)),
+        logging=_merge_dataclass(config.logging, _section_values(raw, "logging", config_path)),
     )
 
 
