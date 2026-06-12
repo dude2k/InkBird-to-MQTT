@@ -1,0 +1,4 @@
+numpy>=1.23
+paho-mqtt>=1.6
+PyYAML>=6.0
+

@@ -1,0 +1,17 @@
+[Unit]
+Description=Inkbird IBS-P01R SDR MQTT Decoder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=inkbird
+Group=inkbird
+WorkingDirectory=/opt/inkbird-ibs-p01r-mqtt
+ExecStart=/opt/inkbird-ibs-p01r-mqtt/.venv/bin/inkbird-ibs-p01r-mqtt run --config /etc/inkbird-ibs-p01r/config.yaml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

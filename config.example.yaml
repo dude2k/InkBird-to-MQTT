@@ -1,0 +1,42 @@
+device:
+  name: "pool"
+  model: "Inkbird IBS-P01R"
+  id: "pool"
+
+sdr:
+  mode: "rtl433_cs16"
+  start_rtl433: false
+  rtl433_path: "rtl_433"
+  device: "driver=sdrplay,antenna=Antenna A"
+  frequency: "434.097M"
+  sample_rate: "1000k"
+  capture_dir: "/var/lib/inkbird-ibs-p01r/captures"
+  min_long_file_size: 3000000
+  cleanup_after_decode: true
+  keep_failed_files: false
+  file_stable_seconds: 0.5
+  poll_interval_seconds: 1.0
+
+decoder:
+  fs: 1000000
+  sps: 100
+  tone_min_hz: -215000
+  tone_max_hz: -150000
+  bit_threshold_hz: -182500
+  min_valid_symbols: 500
+  min_confidence_count: 1
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  username: null
+  password: null
+  client_id: "inkbird-ibs-p01r"
+  topic: "sensors/inkbird_ibs_p01r/pool"
+  availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+  qos: 0
+  retain: false
+
+logging:
+  level: "INFO"
+

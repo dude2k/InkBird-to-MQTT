@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inkbird-ibs-p01r-mqtt"
+version = "0.1.0"
+description = "Inkbird IBS-P01R SDR cs16 decoder with MQTT publishing"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Inkbird IBS-P01R MQTT contributors" }
+]
+dependencies = [
+  "numpy>=1.23",
+  "paho-mqtt>=1.6",
+  "PyYAML>=6.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8"
+]
+
+[project.scripts]
+inkbird-ibs-p01r-mqtt = "inkbird_ibs_p01r.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

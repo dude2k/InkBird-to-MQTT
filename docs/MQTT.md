@@ -1,0 +1,52 @@
+# MQTT
+
+Every successful decode is published as JSON.
+
+Default topic:
+
+```text
+sensors/inkbird_ibs_p01r/pool
+```
+
+Example payload:
+
+```json
+{
+  "device": "inkbird_ibs_p01r",
+  "device_name": "pool",
+  "device_id": "pool",
+  "model": "Inkbird IBS-P01R",
+  "temperature_C": 26.2,
+  "temperature_C_exact": 26.2,
+  "field": "e0c0",
+  "flags": 7,
+  "raw13": 192,
+  "marker": "2280a280",
+  "confidence_count": 2,
+  "frequency_Hz": 434097000,
+  "sample_rate": 1000000,
+  "source": "rtl_433_cs16",
+  "source_file": "g005_434.097M_1000k.cs16",
+  "timestamp": "2026-06-12T12:20:00+02:00"
+}
+```
+
+Availability is published when `mqtt.availability_topic` is set:
+
+```text
+sensors/inkbird_ibs_p01r/pool/availability
+```
+
+Payloads:
+
+```text
+online
+offline
+```
+
+## Test Publish
+
+```bash
+inkbird-ibs-p01r-mqtt test-mqtt --config ./config.yaml
+```
+
