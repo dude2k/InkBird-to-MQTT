@@ -57,6 +57,14 @@ The service waits until a file is at least this size and stable before decoding 
 
 Stable files below this threshold are treated as `too_short` and cleaned up according to the same retention settings as `no_hit` captures.
 
+## Runtime Monitoring
+
+The service logs periodic aggregate capture statistics when `sdr.capture_stats_interval_seconds` is enabled. This keeps normal cleanup quiet while still showing whether captures are arriving and being deleted.
+
+If `rtl_433` exits, the Python service logs `rtl433_exited` and starts it again after `sdr.rtl433_restart_interval_seconds`. This avoids a full systemd restart for transient capture-process failures.
+
+If no successful decode is published for `sdr.no_successful_decode_warning_seconds`, the service logs `no_successful_decode_for`. That usually means no sensor packet was received, the receiver is tuned incorrectly, the antenna path is bad, or captures are being produced but not decoding.
+
 ## Raspberry Pi Notes
 
 Install and verify the SDRplay API and `rtl_433` before enabling the systemd service. The service user must be able to access the SDR device and write to the capture directory.

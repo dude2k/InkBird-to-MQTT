@@ -91,11 +91,13 @@ class CaptureCleanupTests(unittest.TestCase):
             path.write_bytes(b"x" * 20)
             config = make_config(Path(tmp), keep_error_files=True)
 
-            with patch("inkbird_ibs_p01r.service.decode_cs16_file", side_effect=RuntimeError("broken")):
-                results = DirectoryWatcher(config).scan_once()
+            with self.assertLogs("inkbird_ibs_p01r.service", level="ERROR") as logs:
+                with patch("inkbird_ibs_p01r.service.decode_cs16_file", side_effect=RuntimeError("broken")):
+                    results = DirectoryWatcher(config).scan_once()
 
             self.assertEqual(results[0].reason, "decode_error")
             self.assertTrue(path.exists())
+            self.assertIn("decode_exception file=sample.cs16", "\n".join(logs.output))
 
     def test_cleanup_disabled_keeps_file(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -115,6 +117,22 @@ class CaptureCleanupTests(unittest.TestCase):
             DirectoryWatcher(config).scan_once()
 
             self.assertTrue(capture_dir.is_dir())
+
+    def test_reused_file_path_with_new_signature_is_processed_again(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.cs16"
+            path.write_bytes(b"x" * 20)
+            config = make_config(Path(tmp), cleanup_after_decode=False)
+            watcher = DirectoryWatcher(config)
+
+            with patch("inkbird_ibs_p01r.service.decode_cs16_file", return_value=make_result(False, "no_hit")) as decode:
+                first = watcher.scan_once()
+                path.write_bytes(b"y" * 21)
+                second = watcher.scan_once()
+
+            self.assertEqual(len(first), 1)
+            self.assertEqual(len(second), 1)
+            self.assertEqual(decode.call_count, 2)
 
     def test_old_keep_failed_files_config_maps_to_new_flags(self) -> None:
         with TemporaryDirectory() as tmp:

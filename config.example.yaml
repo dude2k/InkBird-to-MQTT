@@ -41,6 +41,12 @@ sdr:
   max_capture_age_seconds: 3600
   # Keep the capture directory below this size in MiB, or null to disable.
   max_capture_dir_size_mb: 256
+  # Log aggregated capture statistics at this interval, or null to disable.
+  capture_stats_interval_seconds: 300
+  # Warn if no successful decode was published for this many seconds, or null to disable.
+  no_successful_decode_warning_seconds: 3600
+  # Seconds to wait before restarting rtl_433 after it exits or fails to start.
+  rtl433_restart_interval_seconds: 10
 
 # IQ decoder settings.
 decoder:

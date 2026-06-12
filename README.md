@@ -14,6 +14,8 @@ Initial implementation based on verified capture analysis. The temperature field
 - Watch an `rtl_433 -S all` capture directory for long `.cs16` files.
 - Optionally start and supervise `rtl_433`.
 - Publish successful decodes to MQTT as JSON and as a plain temperature state.
+- Log periodic capture statistics and warn when no successful decode is seen for a configured time.
+- Restart `rtl_433` automatically if the capture process exits.
 - Provide a systemd unit for always-on Raspberry Pi operation.
 - Include tests for confirmed protocol vectors and marker validation.
 
@@ -96,6 +98,12 @@ pip install .
 sudo cp systemd/inkbird-ibs-p01r-mqtt.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl restart inkbird-ibs-p01r-mqtt.service
+```
+
+Check the installed version:
+
+```bash
+inkbird-ibs-p01r-mqtt --version
 ```
 
 ## Local Quick Start
@@ -188,6 +196,43 @@ The first topic contains the full JSON payload. The `/state` topic contains only
 
 For ioBroker, use the `/state` topic for charts, automations, and numeric states. The JSON topic is useful for debugging and metadata.
 
+## ioBroker
+
+The ioBroker MQTT adapter usually creates one object per topic. Use the numeric state topic:
+
+```text
+mqtt.0.sensors.inkbird_ibs_p01r.pool.state
+```
+
+The JSON topic:
+
+```text
+mqtt.0.sensors.inkbird_ibs_p01r.pool
+```
+
+is useful for diagnostics because it includes `field`, `raw13`, `marker`, `confidence_count`, and the source file.
+
+If ioBroker creates `/state` as a string, delete the object once or change its object type to `number`; the next publish will carry a plain value such as `24.1`.
+
+## Home Assistant
+
+Manual MQTT sensor example:
+
+```yaml
+mqtt:
+  sensor:
+    - name: "Pool Temperature"
+      unique_id: inkbird_ibs_p01r_pool_temperature
+      state_topic: "sensors/inkbird_ibs_p01r/pool/state"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+      json_attributes_topic: "sensors/inkbird_ibs_p01r/pool"
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+```
+
+The `/state` topic is the numeric sensor value. The JSON topic is attached as attributes for debugging.
+
 ## Capture Cleanup
 
 For Raspberry Pi 24/7 operation, the recommended capture directory is:
@@ -201,6 +246,9 @@ sdr:
   keep_error_files: true
   max_capture_age_seconds: 3600
   max_capture_dir_size_mb: 256
+  capture_stats_interval_seconds: 300
+  no_successful_decode_warning_seconds: 3600
+  rtl433_restart_interval_seconds: 10
 ```
 
 `/run` is usually a RAM-backed tmpfs. This avoids keeping the frequent `rtl_433 -S all` `.cs16` writes on the SD card. The systemd unit creates `/run/inkbird-ibs-p01r`, and the Python service creates the `captures` subdirectory.
@@ -225,6 +273,14 @@ sdr:
 The service also removes stale captures older than `max_capture_age_seconds` and enforces `max_capture_dir_size_mb` by deleting the oldest `.cs16` files first.
 
 Older configs with `keep_failed_files` are still accepted. If the new `keep_no_hit_files` and `keep_error_files` settings are absent, `keep_failed_files` is mapped to both of them.
+
+At `INFO` level, the service periodically logs aggregate capture statistics:
+
+```text
+capture_stats seen=120 decoded=2 no_hit=8 too_short=110 errors=0 unstable=0 deleted=118 kept=2 deferred=0
+```
+
+It also warns when no successful decode has been published for `no_successful_decode_warning_seconds`. This helps catch antenna, SDR, or sensor problems while keeping normal `too_short` cleanup quiet.
 
 ## Example Decode Output
 

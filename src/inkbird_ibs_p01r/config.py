@@ -33,6 +33,9 @@ class SDRConfig:
     poll_interval_seconds: float = 1.0
     max_capture_age_seconds: int | None = 3600
     max_capture_dir_size_mb: int | None = 256
+    capture_stats_interval_seconds: int | None = 300
+    no_successful_decode_warning_seconds: int | None = 3600
+    rtl433_restart_interval_seconds: int = 10
 
 
 @dataclass(frozen=True)

@@ -85,3 +85,34 @@ If the broker is on another machine, verify from the Raspberry Pi that TCP port 
 ```bash
 nc -vz 192.168.1.10 1883
 ```
+
+## Home Assistant
+
+Manual MQTT sensor example:
+
+```yaml
+mqtt:
+  sensor:
+    - name: "Pool Temperature"
+      unique_id: inkbird_ibs_p01r_pool_temperature
+      state_topic: "sensors/inkbird_ibs_p01r/pool/state"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+      json_attributes_topic: "sensors/inkbird_ibs_p01r/pool"
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+```
+
+## ioBroker
+
+Use the `/state` topic as the numeric value:
+
+```text
+mqtt.0.sensors.inkbird_ibs_p01r.pool.state
+```
+
+Keep the JSON topic for diagnostics:
+
+```text
+mqtt.0.sensors.inkbird_ibs_p01r.pool
+```

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import signal
 import time
+from collections import Counter
 from pathlib import Path
 from threading import Event
 from typing import Callable
@@ -134,7 +135,9 @@ class DirectoryWatcher:
     def __init__(self, config: AppConfig, on_result: ResultCallback | None = None) -> None:
         self.config = config
         self.on_result = on_result
-        self.seen: set[Path] = set()
+        self.seen: set[tuple[Path, int, int]] = set()
+        self.stats: Counter[str] = Counter()
+        self._last_stats_log_at = time.monotonic()
 
     def scan_once(self) -> list[DecodeResult]:
         results: list[DecodeResult] = []
@@ -144,16 +147,25 @@ class DirectoryWatcher:
 
         for path in capture_files(capture_dir):
             resolved = path.resolve()
-            if resolved in self.seen:
-                continue
             try:
                 size = path.stat().st_size
             except FileNotFoundError:
                 continue
 
+            self.stats["seen"] += 1
             LOG.debug("capture_seen file=%s size=%s", path.name, size)
             if not is_file_stable(path, self.config.sdr.file_stable_seconds):
+                self.stats["unstable"] += 1
                 continue
+
+            try:
+                stable_stat = path.stat()
+            except FileNotFoundError:
+                continue
+            signature = (resolved, stable_stat.st_mtime_ns, stable_stat.st_size)
+            if signature in self.seen:
+                continue
+            size = stable_stat.st_size
 
             if size < self.config.sdr.min_long_file_size:
                 LOG.debug(
@@ -175,6 +187,7 @@ class DirectoryWatcher:
                     result = DecodeResult(False, path.name, reason="decode_error")
             self._log_result(result)
             results.append(result)
+            self._record_result(result)
 
             callback_ok = True
             if self.on_result is not None:
@@ -182,14 +195,55 @@ class DirectoryWatcher:
                 callback_ok = callback_result is not False
 
             if result.decode_ok and not callback_ok:
+                self.stats["deferred"] += 1
                 LOG.warning("decode_delivery_deferred file=%s", result.file)
                 continue
 
-            self.seen.add(resolved)
+            if cleanup_capture_file(path, result, self.config):
+                self.stats["deleted"] += 1
+            else:
+                self.seen.add(signature)
+                self.stats["kept"] += 1
 
-            cleanup_capture_file(path, result, self.config)
-
+        self._maybe_log_stats()
         return results
+
+    def _record_result(self, result: DecodeResult) -> None:
+        if result.decode_ok:
+            self.stats["decoded"] += 1
+            return
+
+        reason = result.reason or "decode_error"
+        if reason == "too_short":
+            self.stats["too_short"] += 1
+        elif reason == "no_hit":
+            self.stats["no_hit"] += 1
+        else:
+            self.stats["errors"] += 1
+
+    def _maybe_log_stats(self) -> None:
+        interval = self.config.sdr.capture_stats_interval_seconds
+        if not interval or interval <= 0 or not self.stats:
+            return
+
+        now = time.monotonic()
+        if now - self._last_stats_log_at < interval:
+            return
+
+        LOG.info(
+            "capture_stats seen=%s decoded=%s no_hit=%s too_short=%s errors=%s unstable=%s deleted=%s kept=%s deferred=%s",
+            self.stats["seen"],
+            self.stats["decoded"],
+            self.stats["no_hit"],
+            self.stats["too_short"],
+            self.stats["errors"],
+            self.stats["unstable"],
+            self.stats["deleted"],
+            self.stats["kept"],
+            self.stats["deferred"],
+        )
+        self.stats.clear()
+        self._last_stats_log_at = now
 
     def _run_safety_cleanup(self, capture_dir: Path) -> None:
         deleted_old = cleanup_old_captures(capture_dir, self.config.sdr.max_capture_age_seconds)
@@ -232,6 +286,9 @@ class InkbirdService:
         self.capture = Rtl433Capture(config.sdr) if config.sdr.start_rtl433 else None
         self.watcher = DirectoryWatcher(config, on_result=self._publish_result)
         self._next_mqtt_connect_attempt = 0.0
+        self._next_rtl433_start_attempt = 0.0
+        self._last_successful_decode_at = time.monotonic()
+        self._last_no_decode_warning_at = 0.0
 
     def install_signal_handlers(self) -> None:
         def handle_signal(signum: int, _frame: object) -> None:
@@ -250,19 +307,43 @@ class InkbirdService:
                     self.stop_event.wait(self.config.mqtt.reconnect_interval_seconds)
                     continue
 
-                if self.capture is not None and self.capture.poll() is None and self.capture.process is None:
-                    self.capture.start()
-
-                if self.capture is not None:
-                    code = self.capture.poll()
-                    if code is not None:
-                        LOG.error("rtl433_exited code=%s", code)
-                        self.stop_event.set()
-                        break
+                self._ensure_capture_running()
                 self.watcher.scan_once()
+                self._maybe_log_decode_health()
                 self.stop_event.wait(self.config.sdr.poll_interval_seconds)
         finally:
             self.close()
+
+    def _ensure_capture_running(self) -> None:
+        if self.capture is None:
+            return
+
+        now = time.monotonic()
+        if self.capture.process is not None:
+            code = self.capture.poll()
+            if code is None:
+                return
+            LOG.error(
+                "rtl433_exited code=%s restart_in=%ss",
+                code,
+                self.config.sdr.rtl433_restart_interval_seconds,
+            )
+            self.capture.stop()
+            self._next_rtl433_start_attempt = now + self.config.sdr.rtl433_restart_interval_seconds
+            return
+
+        if now < self._next_rtl433_start_attempt:
+            return
+
+        try:
+            self.capture.start()
+        except Exception as exc:
+            self._next_rtl433_start_attempt = now + self.config.sdr.rtl433_restart_interval_seconds
+            LOG.error(
+                "rtl433_start_failed retry_in=%ss error=%r",
+                self.config.sdr.rtl433_restart_interval_seconds,
+                exc,
+            )
 
     def _ensure_mqtt_connected(self) -> bool:
         if self.publisher.is_connected:
@@ -305,10 +386,30 @@ class InkbirdService:
                 self.config.mqtt.state_topic,
                 payload["temperature_C"],
             )
+            self._last_successful_decode_at = time.monotonic()
             return True
         except Exception as exc:
             LOG.error("mqtt_publish_failed error=%r", exc)
             return False
+
+    def _maybe_log_decode_health(self) -> None:
+        interval = self.config.sdr.no_successful_decode_warning_seconds
+        if not interval or interval <= 0:
+            return
+
+        now = time.monotonic()
+        silence = now - self._last_successful_decode_at
+        if silence < interval:
+            return
+        if now - self._last_no_decode_warning_at < interval:
+            return
+
+        LOG.warning(
+            "no_successful_decode_for seconds=%.0f capture_dir=%s",
+            silence,
+            self.config.sdr.capture_dir,
+        )
+        self._last_no_decode_warning_at = now
 
     def stop(self) -> None:
         self.stop_event.set()

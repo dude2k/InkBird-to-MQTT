@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from threading import Event
 
+from . import __version__
 from .config import load_config
 from .decoder import DecodeResult, decode_cs16_file
 from .mqtt_client import MQTTPublisher
@@ -100,7 +101,7 @@ def command_test_mqtt(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="inkbird-ibs-p01r-mqtt")
-    parser.add_argument("--version", action="version", version="inkbird-ibs-p01r-mqtt 0.1.0")
+    parser.add_argument("--version", action="version", version=f"inkbird-ibs-p01r-mqtt {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     decode = subparsers.add_parser("decode-file", help="decode one rtl_433 .cs16 file")
