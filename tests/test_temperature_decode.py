@@ -9,6 +9,8 @@ class TemperatureDecodeTests(unittest.TestCase):
     def test_confirmed_temperature_vectors(self) -> None:
         vectors = [
             ("fc40", 7, -960, 22.6),
+            ("fe20", 7, -480, 24.1),
+            ("fe40", 7, -448, 24.2),
             ("ff20", 7, -224, 24.9),
             ("ff60", 7, -160, 25.1),
             ("ff80", 7, -128, 25.2),
@@ -32,4 +34,3 @@ class TemperatureDecodeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

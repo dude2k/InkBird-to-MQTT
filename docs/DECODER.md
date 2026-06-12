@@ -302,6 +302,8 @@ The following vectors have been confirmed from live captures:
 ```text
 Temperature  Field  Flags  Raw13  Marker
 22.6 °C      fc40   7      -960   not always printed, expected valid
+24.1 °C      fe20   7      -480   0280a280
+24.2 °C      fe40   7      -448   0280a280
 24.9 °C      ff20   7      -224   0280a280
 25.1 °C      ff60   7      -160   0280a280
 25.2 °C      ff80   7      -128   0280a280
@@ -471,9 +473,9 @@ The trailing bytes may contain checksum, status, or other information.
 
 ## MQTT Integration Recommendation
 
-A successful decode should be published as JSON.
+A successful decode should be published as JSON. For automation systems such as ioBroker, the service also publishes a plain numeric temperature state by default.
 
-Example MQTT topic:
+Default JSON MQTT topic:
 
 ```text
 sensors/inkbird_ibs_p01r/pool
@@ -495,6 +497,18 @@ Example payload:
   "frequency_Hz": 434097000,
   "sample_rate": 1000000
 }
+```
+
+Default plain temperature topic:
+
+```text
+sensors/inkbird_ibs_p01r/pool/state
+```
+
+Example state payload:
+
+```text
+26.2
 ```
 
 ## Example CLI Output

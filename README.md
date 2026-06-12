@@ -2,7 +2,7 @@
 
 Python service for decoding Inkbird IBS-P01R pool thermometer RF captures and publishing the temperature to MQTT.
 
-The decoder is intended for Raspberry Pi installations that use `rtl_433 -S all` with an SDRplay RSPdx-R2. It reads `.cs16` IQ files, extracts the currently reverse-engineered Inkbird packet, decodes the temperature field, and publishes successful readings as JSON.
+The decoder is intended for Raspberry Pi installations that use `rtl_433 -S all` with an SDRplay RSPdx-R2. It reads `.cs16` IQ files, extracts the currently reverse-engineered Inkbird packet, decodes the temperature field, and publishes successful readings to MQTT as JSON plus an optional plain numeric state.
 
 ## Status
 

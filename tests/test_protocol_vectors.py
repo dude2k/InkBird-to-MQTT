@@ -12,6 +12,12 @@ class ProtocolVectorTests(unittest.TestCase):
         self.assertEqual(decoded.raw13, -128)
         self.assertEqual(decoded.temperature_C, 25.2)
 
+    def test_observed_24_2_payload_decodes(self) -> None:
+        decoded = decode_payload_hex(PREFIX_HEX + "fe40" + "0280a280")
+        self.assertEqual(decoded.field, "fe40")
+        self.assertEqual(decoded.raw13, -448)
+        self.assertEqual(decoded.temperature_C, 24.2)
+
     def test_payload_with_2280_marker_decodes(self) -> None:
         decoded = decode_payload_hex(PREFIX_HEX + "e0c0" + "2280a280" + "aead60")
         self.assertEqual(decoded.field, "e0c0")
@@ -25,4 +31,3 @@ class ProtocolVectorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
