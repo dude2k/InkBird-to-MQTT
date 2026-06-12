@@ -39,6 +39,12 @@ def build_mqtt_payload(result: DecodeResult, config: AppConfig, timestamp: str |
     }
 
 
+def build_state_payload(result: DecodeResult) -> str:
+    if not result.decode_ok or result.temperature_C is None:
+        raise ValueError("only successful decode results can be published")
+    return f"{result.temperature_C:.1f}"
+
+
 class MQTTPublisher:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
@@ -117,6 +123,15 @@ class MQTTPublisher:
             retain=self.config.mqtt.retain,
         )
         info.wait_for_publish()
+
+        if self.config.mqtt.state_topic:
+            state_info = self._client.publish(
+                self.config.mqtt.state_topic,
+                build_state_payload(result),
+                qos=self.config.mqtt.qos,
+                retain=self.config.mqtt.retain,
+            )
+            state_info.wait_for_publish()
         return payload
 
     def close(self, publish_offline: bool = True) -> None:

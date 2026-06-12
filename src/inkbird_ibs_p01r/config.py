@@ -49,6 +49,7 @@ class MQTTConfig:
     password: str | None = None
     client_id: str = "inkbird-ibs-p01r"
     topic: str = "sensors/inkbird_ibs_p01r/pool"
+    state_topic: str | None = "sensors/inkbird_ibs_p01r/pool/state"
     availability_topic: str | None = "sensors/inkbird_ibs_p01r/pool/availability"
     qos: int = 0
     retain: bool = False

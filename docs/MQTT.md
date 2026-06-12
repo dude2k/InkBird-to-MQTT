@@ -1,8 +1,8 @@
 # MQTT
 
-Every successful decode is published as JSON.
+Every successful decode is published as JSON and, by default, as a plain numeric temperature state.
 
-Default topic:
+Default JSON topic:
 
 ```text
 sensors/inkbird_ibs_p01r/pool
@@ -30,6 +30,20 @@ Example payload:
   "timestamp": "2026-06-12T12:20:00+02:00"
 }
 ```
+
+The plain temperature value is published when `mqtt.state_topic` is set:
+
+```text
+sensors/inkbird_ibs_p01r/pool/state
+```
+
+Example payload:
+
+```text
+26.2
+```
+
+Set `mqtt.state_topic: null` to disable the plain state topic.
 
 Availability is published when `mqtt.availability_topic` is set:
 
@@ -60,6 +74,8 @@ Relevant configuration:
 mqtt:
   host: "192.168.1.10"
   port: 1883
+  topic: "sensors/inkbird_ibs_p01r/pool"
+  state_topic: "sensors/inkbird_ibs_p01r/pool/state"
   connect_timeout_seconds: 10
   reconnect_interval_seconds: 30
 ```

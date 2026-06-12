@@ -197,7 +197,12 @@ class InkbirdService:
             if not self._ensure_mqtt_connected():
                 return False
             payload = self.publisher.publish_decode(result)
-            LOG.info("mqtt_publish topic=%s temperature_C=%s", self.config.mqtt.topic, payload["temperature_C"])
+            LOG.info(
+                "mqtt_publish topic=%s state_topic=%s temperature_C=%s",
+                self.config.mqtt.topic,
+                self.config.mqtt.state_topic,
+                payload["temperature_C"],
+            )
             return True
         except Exception as exc:
             LOG.error("mqtt_publish_failed error=%r", exc)

@@ -13,7 +13,7 @@ Initial implementation based on verified capture analysis. The temperature field
 - Decode a single `.cs16` file to JSON.
 - Watch an `rtl_433 -S all` capture directory for long `.cs16` files.
 - Optionally start and supervise `rtl_433`.
-- Publish successful decodes to MQTT.
+- Publish successful decodes to MQTT as JSON and as a plain temperature state.
 - Provide a systemd unit for always-on Raspberry Pi operation.
 - Include tests for confirmed protocol vectors and marker validation.
 
@@ -166,6 +166,23 @@ Common causes:
 - Username/password are required but missing in `config.yaml`.
 
 When MQTT is unavailable, the service now logs `mqtt_connect_failed` and retries instead of exiting.
+
+## MQTT Topics
+
+By default, every successful decode is published to two measurement topics:
+
+```text
+sensors/inkbird_ibs_p01r/pool
+sensors/inkbird_ibs_p01r/pool/state
+```
+
+The first topic contains the full JSON payload. The `/state` topic contains only the temperature value, for example:
+
+```text
+24.1
+```
+
+For ioBroker, use the `/state` topic for charts, automations, and numeric states. The JSON topic is useful for debugging and metadata.
 
 ## Example Decode Output
 

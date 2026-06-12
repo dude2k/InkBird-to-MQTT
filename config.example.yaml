@@ -65,6 +65,8 @@ mqtt:
   client_id: "inkbird-ibs-p01r"
   # Main topic for JSON measurement payloads.
   topic: "sensors/inkbird_ibs_p01r/pool"
+  # Optional topic for the plain numeric temperature value.
+  state_topic: "sensors/inkbird_ibs_p01r/pool/state"
   # Optional availability topic, or null to disable.
   availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
   # MQTT QoS level for publishes.
