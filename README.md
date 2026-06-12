@@ -392,6 +392,10 @@ python -m unittest discover -s tests
 - [SDR setup](docs/SDR_SETUP.md)
 - [MQTT payloads](docs/MQTT.md)
 
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
+
 ## Changelog
 
 - `0.4.0`: Add optional MQTT over TLS/MQTTS support and TLS checks in `doctor`.
