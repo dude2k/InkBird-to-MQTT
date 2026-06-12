@@ -21,18 +21,26 @@ sdr:
   frequency: "434.097M"
   # SDR sample rate used by the decoder.
   sample_rate: "1000k"
-  # Directory where rtl_433 writes .cs16 capture files.
-  capture_dir: "/var/lib/inkbird-ibs-p01r/captures"
+  # Directory where rtl_433 writes .cs16 capture files. /run is RAM/tmpfs on most Linux systems.
+  capture_dir: "/run/inkbird-ibs-p01r/captures"
   # Minimum .cs16 file size treated as a complete long capture.
   min_long_file_size: 3000000
-  # Remove processed capture files after decode attempts.
+  # Remove capture files after decode attempts according to the keep_* flags below.
   cleanup_after_decode: true
-  # Keep failed long captures for later manual debugging.
-  keep_failed_files: false
+  # Keep successfully decoded captures for later manual debugging.
+  keep_successful_files: false
+  # Keep no_hit and too_short captures for later manual debugging.
+  keep_no_hit_files: false
+  # Keep decode_error and other unexpected failure captures for later manual debugging.
+  keep_error_files: true
   # Seconds a file size must stay unchanged before decoding.
   file_stable_seconds: 0.5
   # Seconds between capture directory scans.
   poll_interval_seconds: 1.0
+  # Delete stale .cs16 files older than this many seconds, or null to disable.
+  max_capture_age_seconds: 3600
+  # Keep the capture directory below this size in MiB, or null to disable.
+  max_capture_dir_size_mb: 256
 
 # IQ decoder settings.
 decoder:

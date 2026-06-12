@@ -25,6 +25,20 @@ rtl_433 \
 
 `rtl_433` writes capture files into the current working directory. For service use, configure `sdr.capture_dir` and either run `rtl_433` externally in that directory or set `sdr.start_rtl433: true`.
 
+Recommended service capture directory:
+
+```text
+/run/inkbird-ibs-p01r/captures
+```
+
+`/run` is normally RAM-backed tmpfs on Linux and is preferred for continuous Raspberry Pi operation because it reduces SD-card writes. The systemd unit creates `/run/inkbird-ibs-p01r`, and the Python service creates the `captures` subdirectory.
+
+For debugging, a persistent directory can be used instead:
+
+```text
+/var/lib/inkbird-ibs-p01r/captures
+```
+
 ## Long Files
 
 Not every capture contains a full usable packet. Short files often contain fragments only. The default long-file threshold is:
@@ -41,7 +55,8 @@ Typical useful files are around:
 
 The service waits until a file is at least this size and stable before decoding it.
 
+Stable files below this threshold are treated as `too_short` and cleaned up according to the same retention settings as `no_hit` captures.
+
 ## Raspberry Pi Notes
 
 Install and verify the SDRplay API and `rtl_433` before enabling the systemd service. The service user must be able to access the SDR device and write to the capture directory.
-

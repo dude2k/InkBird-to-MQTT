@@ -55,7 +55,7 @@ Create the runtime directories and configuration:
 
 ```bash
 sudo useradd --system --home /var/lib/inkbird-ibs-p01r --shell /usr/sbin/nologin inkbird
-sudo mkdir -p /etc/inkbird-ibs-p01r /var/lib/inkbird-ibs-p01r/captures
+sudo mkdir -p /etc/inkbird-ibs-p01r /var/lib/inkbird-ibs-p01r
 sudo cp config.example.yaml /etc/inkbird-ibs-p01r/config.yaml
 sudo chown -R inkbird:inkbird /var/lib/inkbird-ibs-p01r
 sudo chown root:root /etc/inkbird-ibs-p01r/config.yaml
@@ -66,8 +66,8 @@ Edit `/etc/inkbird-ibs-p01r/config.yaml` and set at least:
 - `mqtt.host`
 - `mqtt.topic`
 - `sdr.device`
-- `sdr.capture_dir`
-- `sdr.start_rtl433: true` if the service should start `rtl_433` itself
+- `sdr.capture_dir`, default `/run/inkbird-ibs-p01r/captures`
+- `sdr.start_rtl433: true`, if the service should start `rtl_433` itself
 
 Install and start the systemd service:
 
@@ -93,6 +93,8 @@ cd /opt/inkbird-ibs-p01r-mqtt
 git pull
 . .venv/bin/activate
 pip install .
+sudo cp systemd/inkbird-ibs-p01r-mqtt.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl restart inkbird-ibs-p01r-mqtt.service
 ```
 
@@ -117,6 +119,8 @@ Decode one file:
 ```bash
 inkbird-ibs-p01r-mqtt decode-file ./captures/g005_434.097M_1000k.cs16
 ```
+
+Add `--delete-after` if a manual decode should remove the input file after the decode attempt.
 
 Watch a directory:
 
@@ -183,6 +187,44 @@ The first topic contains the full JSON payload. The `/state` topic contains only
 ```
 
 For ioBroker, use the `/state` topic for charts, automations, and numeric states. The JSON topic is useful for debugging and metadata.
+
+## Capture Cleanup
+
+For Raspberry Pi 24/7 operation, the recommended capture directory is:
+
+```yaml
+sdr:
+  capture_dir: "/run/inkbird-ibs-p01r/captures"
+  cleanup_after_decode: true
+  keep_successful_files: false
+  keep_no_hit_files: false
+  keep_error_files: true
+  max_capture_age_seconds: 3600
+  max_capture_dir_size_mb: 256
+```
+
+`/run` is usually a RAM-backed tmpfs. This avoids keeping the frequent `rtl_433 -S all` `.cs16` writes on the SD card. The systemd unit creates `/run/inkbird-ibs-p01r`, and the Python service creates the `captures` subdirectory.
+
+The service deletes stable `.cs16` files after processing:
+
+- successful decodes are deleted after MQTT publish unless `keep_successful_files: true`
+- `no_hit` captures are deleted unless `keep_no_hit_files: true`
+- short stable captures below `min_long_file_size` are treated as `too_short` and deleted unless `keep_no_hit_files: true`
+- `decode_error` captures are kept by default with `keep_error_files: true`
+
+For debugging, use a persistent directory and enable retention:
+
+```yaml
+sdr:
+  capture_dir: "/var/lib/inkbird-ibs-p01r/captures"
+  keep_successful_files: true
+  keep_no_hit_files: true
+  keep_error_files: true
+```
+
+The service also removes stale captures older than `max_capture_age_seconds` and enforces `max_capture_dir_size_mb` by deleting the oldest `.cs16` files first.
+
+Older configs with `keep_failed_files` are still accepted. If the new `keep_no_hit_files` and `keep_error_files` settings are absent, `keep_failed_files` is mapped to both of them.
 
 ## Example Decode Output
 

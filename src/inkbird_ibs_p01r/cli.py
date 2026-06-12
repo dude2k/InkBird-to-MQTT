@@ -11,7 +11,7 @@ from threading import Event
 from .config import load_config
 from .decoder import DecodeResult, decode_cs16_file
 from .mqtt_client import MQTTPublisher
-from .service import DirectoryWatcher, InkbirdService
+from .service import DirectoryWatcher, InkbirdService, cleanup_capture_file
 
 
 def configure_logging(level: str) -> None:
@@ -36,6 +36,15 @@ def command_decode_file(args: argparse.Namespace) -> int:
         min_file_size=args.min_long_file_size,
     )
     print_result(result, pretty=args.pretty)
+    if args.delete_after:
+        sdr = replace(
+            config.sdr,
+            cleanup_after_decode=True,
+            keep_successful_files=False,
+            keep_no_hit_files=False,
+            keep_error_files=False,
+        )
+        cleanup_capture_file(args.file, result, replace(config, sdr=sdr))
     return 0
 
 
@@ -98,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     decode.add_argument("file", type=Path)
     decode.add_argument("--config", type=Path, default=None)
     decode.add_argument("--min-long-file-size", type=int, default=0)
+    decode.add_argument("--delete-after", action="store_true", help="delete the input file after the decode attempt")
     decode.add_argument("--pretty", action="store_true")
     decode.set_defaults(func=command_decode_file)
 
