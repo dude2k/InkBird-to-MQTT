@@ -65,6 +65,11 @@ class MQTTConfig:
     availability_topic: str | None = "sensors/inkbird_ibs_p01r/pool/availability"
     qos: int = 0
     retain: bool = False
+    tls_enabled: bool = False
+    tls_ca_cert: str | None = None
+    tls_insecure: bool = False
+    tls_client_cert: str | None = None
+    tls_client_key: str | None = None
     connect_timeout_seconds: float = 10.0
     reconnect_interval_seconds: float = 30.0
 

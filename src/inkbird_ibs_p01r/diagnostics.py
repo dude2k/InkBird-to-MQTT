@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from .config import AppConfig
+from .mqtt_client import build_tls_context
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,11 @@ def effective_config_lines(config: AppConfig) -> list[str]:
         *topic_lines,
         f"mqtt.qos={config.mqtt.qos}",
         f"mqtt.retain={config.mqtt.retain}",
+        f"mqtt.tls_enabled={config.mqtt.tls_enabled}",
+        f"mqtt.tls_ca_cert={config.mqtt.tls_ca_cert}",
+        f"mqtt.tls_insecure={config.mqtt.tls_insecure}",
+        f"mqtt.tls_client_cert={config.mqtt.tls_client_cert}",
+        f"mqtt.tls_client_key_set={config.mqtt.tls_client_key is not None}",
         f"logging.level={config.logging.level}",
     ]
 
@@ -71,12 +78,19 @@ def run_status_checks(config: AppConfig) -> list[DiagnosticResult]:
 
 
 def run_doctor_checks(config: AppConfig) -> list[DiagnosticResult]:
-    return [
+    results = [
         *run_status_checks(config),
         _capture_dir_writable_check(config),
-        _mqtt_tcp_check(config),
-        _rtl433_version_check(config),
     ]
+    if config.mqtt.tls_enabled:
+        results.append(_mqtt_tls_files_check(config))
+    results.extend(
+        [
+            _mqtt_network_check(config),
+            _rtl433_version_check(config),
+        ]
+    )
+    return results
 
 
 def format_results(results: list[DiagnosticResult]) -> str:
@@ -98,6 +112,8 @@ def _mqtt_config_check(config: AppConfig) -> DiagnosticResult:
         return DiagnosticResult("mqtt_config", False, "mqtt.host is empty")
     if not 1 <= int(config.mqtt.port) <= 65535:
         return DiagnosticResult("mqtt_config", False, f"invalid port {config.mqtt.port}")
+    if config.mqtt.tls_client_key and not config.mqtt.tls_client_cert:
+        return DiagnosticResult("mqtt_config", False, "tls_client_key requires tls_client_cert")
     return DiagnosticResult("mqtt_config", True, f"{config.mqtt.host}:{config.mqtt.port}")
 
 
@@ -159,6 +175,25 @@ def _rtl433_version_check(config: AppConfig) -> DiagnosticResult:
     return DiagnosticResult("rtl_433_version", completed.returncode == 0, detail, required=bool(config.sdr.start_rtl433))
 
 
+def _mqtt_tls_files_check(config: AppConfig) -> DiagnosticResult:
+    paths = [
+        ("tls_client_cert", config.mqtt.tls_client_cert),
+        ("tls_client_key", config.mqtt.tls_client_key),
+    ]
+    if not config.mqtt.tls_insecure:
+        paths.append(("tls_ca_cert", config.mqtt.tls_ca_cert))
+    missing = [f"{name}={path}" for name, path in paths if path and not Path(path).is_file()]
+    if missing:
+        return DiagnosticResult("mqtt_tls_files", False, "missing files: " + ", ".join(missing))
+    return DiagnosticResult("mqtt_tls_files", True, "configured certificate files are readable or not required")
+
+
+def _mqtt_network_check(config: AppConfig) -> DiagnosticResult:
+    if config.mqtt.tls_enabled:
+        return _mqtt_tls_check(config)
+    return _mqtt_tcp_check(config)
+
+
 def _mqtt_tcp_check(config: AppConfig) -> DiagnosticResult:
     try:
         with socket.create_connection(
@@ -170,6 +205,26 @@ def _mqtt_tcp_check(config: AppConfig) -> DiagnosticResult:
         return DiagnosticResult("mqtt_tcp", False, f"{config.mqtt.host}:{config.mqtt.port} {exc!r}")
 
     return DiagnosticResult("mqtt_tcp", True, f"{config.mqtt.host}:{config.mqtt.port}")
+
+
+def _mqtt_tls_check(config: AppConfig) -> DiagnosticResult:
+    try:
+        context = build_tls_context(config)
+        with socket.create_connection(
+            (config.mqtt.host, int(config.mqtt.port)),
+            timeout=float(config.mqtt.connect_timeout_seconds),
+        ) as sock:
+            with context.wrap_socket(sock, server_hostname=config.mqtt.host):
+                pass
+    except ssl.SSLError as exc:
+        return DiagnosticResult("mqtt_tls", False, f"{config.mqtt.host}:{config.mqtt.port} {exc!r}")
+    except OSError as exc:
+        return DiagnosticResult("mqtt_tls", False, f"{config.mqtt.host}:{config.mqtt.port} {exc!r}")
+
+    detail = f"{config.mqtt.host}:{config.mqtt.port}"
+    if config.mqtt.tls_insecure:
+        detail += " insecure_verification=true"
+    return DiagnosticResult("mqtt_tls", True, detail)
 
 
 def _nearest_existing_parent(path: Path) -> Path:

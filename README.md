@@ -2,7 +2,7 @@
 
 Python service for decoding Inkbird IBS-P01R pool thermometer RF captures and publishing the temperature to MQTT.
 
-The decoder is intended for Raspberry Pi installations that use `rtl_433 -S all` with an SDRplay RSPdx-R2. It reads `.cs16` IQ files, extracts the currently reverse-engineered Inkbird packet, decodes the temperature field, and publishes successful readings to MQTT as JSON plus an optional plain numeric state.
+The decoder is intended for Raspberry Pi installations that use `rtl_433 -S all` with an SDRplay RSPdx-R2. It reads `.cs16` IQ files, extracts the currently reverse-engineered Inkbird packet, decodes the temperature field, and publishes successful readings to MQTT as JSON plus plain scalar state topics.
 
 ## Status
 
@@ -14,6 +14,7 @@ Initial implementation based on verified capture analysis. The temperature field
 - Watch an `rtl_433 -S all` capture directory for long `.cs16` files.
 - Optionally start and supervise `rtl_433`.
 - Publish successful decodes to MQTT as JSON plus plain scalar state topics.
+- Optionally connect to MQTT over TLS/MQTTS.
 - Log periodic capture statistics and warn when no successful decode is seen for a configured time.
 - Restart `rtl_433` automatically if the capture process exits.
 - Provide `status` and `doctor` commands for installation diagnostics.
@@ -186,6 +187,31 @@ Common causes:
 - Username/password are required but missing in `config.yaml`.
 
 When MQTT is unavailable, the service now logs `mqtt_connect_failed` and retries instead of exiting.
+
+## MQTTS / TLS
+
+MQTT over TLS is disabled by default. Enable it when your broker listens on an encrypted MQTT port, usually `8883`:
+
+```yaml
+mqtt:
+  host: "mqtt.example.local"
+  port: 8883
+  tls_enabled: true
+  tls_ca_cert: null
+  tls_insecure: false
+  tls_client_cert: null
+  tls_client_key: null
+```
+
+`tls_ca_cert: null` uses the system trust store. For a private CA, set `tls_ca_cert` to the CA certificate path. For mutual TLS, set `tls_client_cert` and `tls_client_key`.
+
+For temporary self-signed test setups, `tls_insecure: true` disables certificate verification. Leave it `false` for normal operation.
+
+`doctor` performs a TLS handshake when `tls_enabled: true`:
+
+```bash
+inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
+```
 
 ## MQTT Topics
 
@@ -365,3 +391,9 @@ python -m unittest discover -s tests
 - [Decoder details](docs/DECODER.md)
 - [SDR setup](docs/SDR_SETUP.md)
 - [MQTT payloads](docs/MQTT.md)
+
+## Changelog
+
+- `0.4.0`: Add optional MQTT over TLS/MQTTS support and TLS checks in `doctor`.
+- `0.3.0`: Add scalar MQTT topics, `status`/`doctor`, startup effective-config logging, and GitHub Actions CI.
+- `0.2.0`: Improve capture cleanup, service observability, and internal `rtl_433` restart handling.

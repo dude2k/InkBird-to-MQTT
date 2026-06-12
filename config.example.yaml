@@ -95,6 +95,16 @@ mqtt:
   qos: 0
   # Retain measurement payloads on the broker.
   retain: false
+  # Enable MQTT over TLS. Use port 8883 unless your broker is configured differently.
+  tls_enabled: false
+  # Optional CA certificate path. null uses the system trust store.
+  tls_ca_cert: null
+  # Disable TLS certificate verification. Only use for temporary tests.
+  tls_insecure: false
+  # Optional client certificate path for mutual TLS.
+  tls_client_cert: null
+  # Optional client private key path for mutual TLS.
+  tls_client_key: null
   # Seconds to wait for a TCP connection to the broker.
   connect_timeout_seconds: 10
   # Seconds to wait before retrying a failed MQTT connection.

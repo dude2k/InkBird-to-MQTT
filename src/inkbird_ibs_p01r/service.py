@@ -26,6 +26,8 @@ def log_effective_config(config: AppConfig) -> None:
             "mqtt_host=%s mqtt_port=%s mqtt_topic=%s mqtt_state_topic=%s "
             "mqtt_field_topic=%s mqtt_raw13_topic=%s mqtt_confidence_topic=%s "
             "mqtt_last_seen_topic=%s mqtt_availability_topic=%s mqtt_username_set=%s mqtt_password_set=%s "
+            "mqtt_tls_enabled=%s mqtt_tls_ca_cert=%s mqtt_tls_insecure=%s "
+            "mqtt_tls_client_cert=%s mqtt_tls_client_key_set=%s "
             "sdr_start_rtl433=%s sdr_rtl433_path=%s sdr_device=%s sdr_frequency=%s sdr_sample_rate=%s "
             "sdr_capture_dir=%s sdr_cleanup_after_decode=%s sdr_keep_successful_files=%s "
             "sdr_keep_no_hit_files=%s sdr_keep_error_files=%s"
@@ -44,6 +46,11 @@ def log_effective_config(config: AppConfig) -> None:
         config.mqtt.availability_topic,
         config.mqtt.username is not None,
         config.mqtt.password is not None,
+        config.mqtt.tls_enabled,
+        config.mqtt.tls_ca_cert,
+        config.mqtt.tls_insecure,
+        config.mqtt.tls_client_cert,
+        config.mqtt.tls_client_key is not None,
         config.sdr.start_rtl433,
         config.sdr.rtl433_path,
         config.sdr.device,

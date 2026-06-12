@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 from datetime import datetime, timezone
 from typing import Any
 
@@ -62,6 +63,20 @@ def build_auxiliary_state_payloads(result: DecodeResult, timestamp: str) -> dict
     }
 
 
+def build_tls_context(config: AppConfig) -> ssl.SSLContext:
+    ca_file = None if config.mqtt.tls_insecure else config.mqtt.tls_ca_cert
+    context = ssl.create_default_context(cafile=ca_file)
+    if config.mqtt.tls_insecure:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    if config.mqtt.tls_client_cert:
+        context.load_cert_chain(
+            certfile=config.mqtt.tls_client_cert,
+            keyfile=config.mqtt.tls_client_key,
+        )
+    return context
+
+
 class MQTTPublisher:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
@@ -100,6 +115,9 @@ class MQTTPublisher:
 
         if self.config.mqtt.username is not None:
             client.username_pw_set(self.config.mqtt.username, self.config.mqtt.password)
+
+        if self.config.mqtt.tls_enabled:
+            client.tls_set_context(build_tls_context(self.config))
 
         client.connect(self.config.mqtt.host, self.config.mqtt.port, keepalive=60)
         self._client = client

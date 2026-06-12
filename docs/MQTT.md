@@ -100,6 +100,11 @@ mqtt:
   raw13_topic: "sensors/inkbird_ibs_p01r/pool/raw13"
   confidence_topic: "sensors/inkbird_ibs_p01r/pool/confidence"
   last_seen_topic: "sensors/inkbird_ibs_p01r/pool/last_seen"
+  tls_enabled: false
+  tls_ca_cert: null
+  tls_insecure: false
+  tls_client_cert: null
+  tls_client_key: null
   connect_timeout_seconds: 10
   reconnect_interval_seconds: 30
 ```
@@ -108,6 +113,31 @@ If the broker is on another machine, verify from the Raspberry Pi that TCP port 
 
 ```bash
 nc -vz 192.168.1.10 1883
+```
+
+## MQTTS / TLS
+
+For MQTT over TLS, enable TLS and use your broker's encrypted port, usually `8883`:
+
+```yaml
+mqtt:
+  host: "mqtt.example.local"
+  port: 8883
+  tls_enabled: true
+  tls_ca_cert: null
+  tls_insecure: false
+  tls_client_cert: null
+  tls_client_key: null
+```
+
+`tls_ca_cert: null` uses the system trust store. Set `tls_ca_cert` for a private CA. Set `tls_client_cert` and `tls_client_key` when the broker requires client certificates.
+
+`tls_insecure: true` disables certificate verification and should only be used temporarily while testing a self-signed setup.
+
+When TLS is enabled, `doctor` performs a TLS handshake:
+
+```bash
+inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
 ```
 
 ## Home Assistant

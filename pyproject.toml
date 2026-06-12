@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inkbird-ibs-p01r-mqtt"
-version = "0.3.0"
+version = "0.4.0"
 description = "Inkbird IBS-P01R SDR cs16 decoder with MQTT publishing"
 readme = "README.md"
 requires-python = ">=3.10"
