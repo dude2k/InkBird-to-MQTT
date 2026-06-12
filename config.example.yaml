@@ -1,43 +1,82 @@
+# Device metadata included in MQTT payloads.
 device:
+  # Human-readable device name.
   name: "pool"
+  # Display model name for the sensor.
   model: "Inkbird IBS-P01R"
+  # Stable device identifier for automations.
   id: "pool"
 
+# SDR and capture settings.
 sdr:
+  # Capture mode used by this service.
   mode: "rtl433_cs16"
-  start_rtl433: false
+  # Start rtl_433 from this service instead of running it separately.
+  start_rtl433: true
+  # Path or command name for rtl_433.
   rtl433_path: "rtl_433"
+  # rtl_433 SDR device string.
   device: "driver=sdrplay,antenna=Antenna A"
+  # Receiver frequency used for Inkbird IBS-P01R captures.
   frequency: "434.097M"
+  # SDR sample rate used by the decoder.
   sample_rate: "1000k"
+  # Directory where rtl_433 writes .cs16 capture files.
   capture_dir: "/var/lib/inkbird-ibs-p01r/captures"
+  # Minimum .cs16 file size treated as a complete long capture.
   min_long_file_size: 3000000
+  # Remove processed capture files after decode attempts.
   cleanup_after_decode: true
+  # Keep failed long captures for later manual debugging.
   keep_failed_files: false
+  # Seconds a file size must stay unchanged before decoding.
   file_stable_seconds: 0.5
+  # Seconds between capture directory scans.
   poll_interval_seconds: 1.0
 
+# IQ decoder settings.
 decoder:
+  # Sample rate in samples per second.
   fs: 1000000
+  # Samples per decoded symbol.
   sps: 100
+  # Lowest valid FSK tone median in Hz.
   tone_min_hz: -215000
+  # Highest valid FSK tone median in Hz.
   tone_max_hz: -150000
+  # Median frequency threshold used to decide bit 0 or bit 1.
   bit_threshold_hz: -182500
+  # Minimum contiguous valid symbols before searching packets.
   min_valid_symbols: 500
+  # Minimum number of agreeing phase hits required for a result.
   min_confidence_count: 1
 
+# MQTT broker and publish settings.
 mqtt:
+  # MQTT broker hostname or IP address.
   host: "localhost"
+  # MQTT broker TCP port.
   port: 1883
+  # Optional MQTT username, or null for anonymous.
   username: null
+  # Optional MQTT password, or null for anonymous.
   password: null
+  # MQTT client ID used by this service.
   client_id: "inkbird-ibs-p01r"
+  # Main topic for JSON measurement payloads.
   topic: "sensors/inkbird_ibs_p01r/pool"
+  # Optional availability topic, or null to disable.
   availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+  # MQTT QoS level for publishes.
   qos: 0
+  # Retain measurement payloads on the broker.
   retain: false
+  # Seconds to wait for a TCP connection to the broker.
   connect_timeout_seconds: 10
+  # Seconds to wait before retrying a failed MQTT connection.
   reconnect_interval_seconds: 30
 
+# Logging settings.
 logging:
+  # Python logging level, for example DEBUG, INFO, WARNING, ERROR.
   level: "INFO"
