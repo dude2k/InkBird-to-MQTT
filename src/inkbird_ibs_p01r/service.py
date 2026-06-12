@@ -13,7 +13,7 @@ from .mqtt_client import MQTTPublisher
 from .rtl433_capture import Rtl433Capture
 
 LOG = logging.getLogger(__name__)
-ResultCallback = Callable[[DecodeResult], None]
+ResultCallback = Callable[[DecodeResult], bool | None]
 
 
 def is_file_stable(path: Path, stable_seconds: float) -> bool:
@@ -70,12 +70,19 @@ class DirectoryWatcher:
                 decoder_config=self.config.decoder,
                 min_file_size=self.config.sdr.min_long_file_size,
             )
-            self.seen.add(resolved)
             self._log_result(result)
             results.append(result)
 
+            callback_ok = True
             if self.on_result is not None:
-                self.on_result(result)
+                callback_result = self.on_result(result)
+                callback_ok = callback_result is not False
+
+            if result.decode_ok and not callback_ok:
+                LOG.warning("decode_delivery_deferred file=%s", result.file)
+                continue
+
+            self.seen.add(resolved)
 
             self._cleanup(path, result)
 
@@ -122,6 +129,7 @@ class InkbirdService:
         self.publisher = MQTTPublisher(config)
         self.capture = Rtl433Capture(config.sdr) if config.sdr.start_rtl433 else None
         self.watcher = DirectoryWatcher(config, on_result=self._publish_result)
+        self._next_mqtt_connect_attempt = 0.0
 
     def install_signal_handlers(self) -> None:
         def handle_signal(signum: int, _frame: object) -> None:
@@ -133,12 +141,16 @@ class InkbirdService:
 
     def run(self) -> None:
         self.install_signal_handlers()
-        self.publisher.connect()
-        if self.capture is not None:
-            self.capture.start()
 
         try:
             while not self.stop_event.is_set():
+                if not self._ensure_mqtt_connected():
+                    self.stop_event.wait(self.config.mqtt.reconnect_interval_seconds)
+                    continue
+
+                if self.capture is not None and self.capture.poll() is None and self.capture.process is None:
+                    self.capture.start()
+
                 if self.capture is not None:
                     code = self.capture.poll()
                     if code is not None:
@@ -150,14 +162,46 @@ class InkbirdService:
         finally:
             self.close()
 
-    def _publish_result(self, result: DecodeResult) -> None:
-        if not result.decode_ok:
-            return
+    def _ensure_mqtt_connected(self) -> bool:
+        if self.publisher.is_connected:
+            return True
+
+        now = time.monotonic()
+        if now < self._next_mqtt_connect_attempt:
+            return False
+
         try:
+            self.publisher.connect()
+            LOG.info(
+                "mqtt_connected host=%s port=%s topic=%s",
+                self.config.mqtt.host,
+                self.config.mqtt.port,
+                self.config.mqtt.topic,
+            )
+            return True
+        except Exception as exc:
+            self._next_mqtt_connect_attempt = now + self.config.mqtt.reconnect_interval_seconds
+            LOG.error(
+                "mqtt_connect_failed host=%s port=%s retry_in=%ss error=%r",
+                self.config.mqtt.host,
+                self.config.mqtt.port,
+                self.config.mqtt.reconnect_interval_seconds,
+                exc,
+            )
+            return False
+
+    def _publish_result(self, result: DecodeResult) -> bool:
+        if not result.decode_ok:
+            return True
+        try:
+            if not self._ensure_mqtt_connected():
+                return False
             payload = self.publisher.publish_decode(result)
             LOG.info("mqtt_publish topic=%s temperature_C=%s", self.config.mqtt.topic, payload["temperature_C"])
+            return True
         except Exception as exc:
             LOG.error("mqtt_publish_failed error=%r", exc)
+            return False
 
     def stop(self) -> None:
         self.stop_event.set()

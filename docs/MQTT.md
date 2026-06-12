@@ -50,3 +50,22 @@ offline
 inkbird-ibs-p01r-mqtt test-mqtt --config ./config.yaml
 ```
 
+## Connection Retries
+
+The service retries MQTT connections instead of exiting when the broker is temporarily unreachable.
+
+Relevant configuration:
+
+```yaml
+mqtt:
+  host: "192.168.1.10"
+  port: 1883
+  connect_timeout_seconds: 10
+  reconnect_interval_seconds: 30
+```
+
+If the broker is on another machine, verify from the Raspberry Pi that TCP port `1883` is reachable:
+
+```bash
+nc -vz 192.168.1.10 1883
+```

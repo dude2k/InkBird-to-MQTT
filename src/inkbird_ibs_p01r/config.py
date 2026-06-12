@@ -52,6 +52,8 @@ class MQTTConfig:
     availability_topic: str | None = "sensors/inkbird_ibs_p01r/pool/availability"
     qos: int = 0
     retain: bool = False
+    connect_timeout_seconds: float = 10.0
+    reconnect_interval_seconds: float = 30.0
 
 
 @dataclass(frozen=True)
@@ -125,4 +127,3 @@ def frequency_hz(value: str | int | float) -> int:
 
 def sample_rate_hz(value: str | int | float) -> int:
     return parse_scaled_number(value)
-

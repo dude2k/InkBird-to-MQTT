@@ -84,6 +84,18 @@ Follow logs:
 journalctl -u inkbird-ibs-p01r-mqtt.service -f
 ```
 
+## Updating On The Raspberry Pi
+
+When the service was installed with `pip install .`, pull updates and reinstall the package into the virtual environment:
+
+```bash
+cd /opt/inkbird-ibs-p01r-mqtt
+git pull
+. .venv/bin/activate
+pip install .
+sudo systemctl restart inkbird-ibs-p01r-mqtt.service
+```
+
 ## Local Quick Start
 
 For testing or development on a cloned checkout:
@@ -117,6 +129,43 @@ Run the MQTT service:
 ```bash
 inkbird-ibs-p01r-mqtt run --config ./config.yaml
 ```
+
+## MQTT Troubleshooting
+
+If the service logs `TimeoutError: timed out` while connecting to MQTT, the configured broker address or port is not reachable from the Raspberry Pi.
+
+Check the effective service config:
+
+```bash
+sudo grep -A20 '^mqtt:' /etc/inkbird-ibs-p01r/config.yaml
+```
+
+Check TCP reachability from the Pi:
+
+```bash
+nc -vz MQTT_BROKER_IP 1883
+```
+
+If `nc` is not installed:
+
+```bash
+sudo apt install -y netcat-openbsd
+```
+
+If Mosquitto client tools are installed, test a publish without this service:
+
+```bash
+mosquitto_pub -h MQTT_BROKER_IP -p 1883 -t sensors/inkbird_ibs_p01r/test -m test
+```
+
+Common causes:
+
+- The broker only listens on `localhost` instead of the LAN address.
+- Firewall rules block port `1883`.
+- The IP address in `mqtt.host` is wrong or not reachable from the Pi network.
+- Username/password are required but missing in `config.yaml`.
+
+When MQTT is unavailable, the service now logs `mqtt_connect_failed` and retries instead of exiting.
 
 ## Example Decode Output
 

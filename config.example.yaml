@@ -36,7 +36,8 @@ mqtt:
   availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
   qos: 0
   retain: false
+  connect_timeout_seconds: 10
+  reconnect_interval_seconds: 30
 
 logging:
   level: "INFO"
-
