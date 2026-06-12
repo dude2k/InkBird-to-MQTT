@@ -11,6 +11,13 @@ from threading import Event
 from . import __version__
 from .config import load_config
 from .decoder import DecodeResult, decode_cs16_file
+from .diagnostics import (
+    effective_config_lines,
+    exit_code_for_results,
+    format_results,
+    run_doctor_checks,
+    run_status_checks,
+)
 from .mqtt_client import MQTTPublisher
 from .service import DirectoryWatcher, InkbirdService, cleanup_capture_file
 
@@ -99,6 +106,28 @@ def command_test_mqtt(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_status(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    print("Effective config:")
+    for line in effective_config_lines(config):
+        print(f"  {line}")
+    print()
+    results = run_status_checks(config)
+    print(format_results(results))
+    return exit_code_for_results(results)
+
+
+def command_doctor(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    print("Effective config:")
+    for line in effective_config_lines(config):
+        print(f"  {line}")
+    print()
+    results = run_doctor_checks(config)
+    print(format_results(results))
+    return exit_code_for_results(results)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="inkbird-ibs-p01r-mqtt")
     parser.add_argument("--version", action="version", version=f"inkbird-ibs-p01r-mqtt {__version__}")
@@ -126,6 +155,14 @@ def build_parser() -> argparse.ArgumentParser:
     test_mqtt = subparsers.add_parser("test-mqtt", help="publish one synthetic decode payload")
     test_mqtt.add_argument("--config", type=Path, required=True)
     test_mqtt.set_defaults(func=command_test_mqtt)
+
+    status = subparsers.add_parser("status", help="show effective config and lightweight runtime checks")
+    status.add_argument("--config", type=Path, required=True)
+    status.set_defaults(func=command_status)
+
+    doctor = subparsers.add_parser("doctor", help="run deeper checks for MQTT, capture directory, and rtl_433")
+    doctor.add_argument("--config", type=Path, required=True)
+    doctor.set_defaults(func=command_doctor)
 
     return parser
 

@@ -35,7 +35,10 @@ class ServiceRuntimeTests(unittest.TestCase):
         capture = FakeCapture()
         service.capture = capture  # type: ignore[assignment]
 
-        service._ensure_capture_running()
+        with self.assertLogs("inkbird_ibs_p01r.service", level="ERROR") as logs:
+            service._ensure_capture_running()
+
+        self.assertIn("rtl433_exited", "\n".join(logs.output))
         self.assertEqual(capture.stop_count, 1)
         self.assertIsNone(capture.process)
 
@@ -55,4 +58,3 @@ class ServiceRuntimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

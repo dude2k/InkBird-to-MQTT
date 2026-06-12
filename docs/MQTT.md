@@ -1,6 +1,6 @@
 # MQTT
 
-Every successful decode is published as JSON and, by default, as a plain numeric temperature state.
+Every successful decode is published as JSON and, by default, as plain scalar state topics.
 
 Default JSON topic:
 
@@ -45,6 +45,26 @@ Example payload:
 
 Set `mqtt.state_topic: null` to disable the plain state topic.
 
+Additional scalar topics are enabled by default:
+
+```text
+sensors/inkbird_ibs_p01r/pool/field
+sensors/inkbird_ibs_p01r/pool/raw13
+sensors/inkbird_ibs_p01r/pool/confidence
+sensors/inkbird_ibs_p01r/pool/last_seen
+```
+
+Example payloads:
+
+```text
+fe20
+-480
+20
+2026-06-12T13:14:35+02:00
+```
+
+Set `mqtt.field_topic`, `mqtt.raw13_topic`, `mqtt.confidence_topic`, or `mqtt.last_seen_topic` to `null` to disable individual scalar topics.
+
 Availability is published when `mqtt.availability_topic` is set:
 
 ```text
@@ -76,6 +96,10 @@ mqtt:
   port: 1883
   topic: "sensors/inkbird_ibs_p01r/pool"
   state_topic: "sensors/inkbird_ibs_p01r/pool/state"
+  field_topic: "sensors/inkbird_ibs_p01r/pool/field"
+  raw13_topic: "sensors/inkbird_ibs_p01r/pool/raw13"
+  confidence_topic: "sensors/inkbird_ibs_p01r/pool/confidence"
+  last_seen_topic: "sensors/inkbird_ibs_p01r/pool/last_seen"
   connect_timeout_seconds: 10
   reconnect_interval_seconds: 30
 ```
@@ -101,14 +125,32 @@ mqtt:
       unit_of_measurement: "°C"
       device_class: temperature
       state_class: measurement
+    - name: "Pool Inkbird Confidence"
+      unique_id: inkbird_ibs_p01r_pool_confidence
+      state_topic: "sensors/inkbird_ibs_p01r/pool/confidence"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+      state_class: measurement
+    - name: "Pool Inkbird Raw13"
+      unique_id: inkbird_ibs_p01r_pool_raw13
+      state_topic: "sensors/inkbird_ibs_p01r/pool/raw13"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+    - name: "Pool Inkbird Last Seen"
+      unique_id: inkbird_ibs_p01r_pool_last_seen
+      state_topic: "sensors/inkbird_ibs_p01r/pool/last_seen"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+      device_class: timestamp
 ```
 
 ## ioBroker
 
-Use the `/state` topic as the numeric value:
+Use the scalar topics as direct ioBroker states:
 
 ```text
 mqtt.0.sensors.inkbird_ibs_p01r.pool.state
+mqtt.0.sensors.inkbird_ibs_p01r.pool.field
+mqtt.0.sensors.inkbird_ibs_p01r.pool.raw13
+mqtt.0.sensors.inkbird_ibs_p01r.pool.confidence
+mqtt.0.sensors.inkbird_ibs_p01r.pool.last_seen
 ```
 
 Keep the JSON topic for diagnostics:

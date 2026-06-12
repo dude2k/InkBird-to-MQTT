@@ -81,6 +81,14 @@ mqtt:
   topic: "sensors/inkbird_ibs_p01r/pool"
   # Optional topic for the plain numeric temperature value.
   state_topic: "sensors/inkbird_ibs_p01r/pool/state"
+  # Optional topic for the decoded 16-bit field as hex text.
+  field_topic: "sensors/inkbird_ibs_p01r/pool/field"
+  # Optional topic for the signed raw13 decoder value.
+  raw13_topic: "sensors/inkbird_ibs_p01r/pool/raw13"
+  # Optional topic for the number of agreeing decoder phase hits.
+  confidence_topic: "sensors/inkbird_ibs_p01r/pool/confidence"
+  # Optional topic for the timestamp of the last published decode.
+  last_seen_topic: "sensors/inkbird_ibs_p01r/pool/last_seen"
   # Optional availability topic, or null to disable.
   availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
   # MQTT QoS level for publishes.

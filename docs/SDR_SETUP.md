@@ -65,6 +65,20 @@ If `rtl_433` exits, the Python service logs `rtl433_exited` and starts it again 
 
 If no successful decode is published for `sdr.no_successful_decode_warning_seconds`, the service logs `no_successful_decode_for`. That usually means no sensor packet was received, the receiver is tuned incorrectly, the antenna path is bad, or captures are being produced but not decoding.
 
+## Diagnostics
+
+Show the effective config and lightweight checks:
+
+```bash
+inkbird-ibs-p01r-mqtt status --config /etc/inkbird-ibs-p01r/config.yaml
+```
+
+Run deeper checks for MQTT TCP reachability, capture directory access, and the `rtl_433` command:
+
+```bash
+inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
+```
+
 ## Raspberry Pi Notes
 
 Install and verify the SDRplay API and `rtl_433` before enabling the systemd service. The service user must be able to access the SDR device and write to the capture directory.

@@ -13,9 +13,10 @@ Initial implementation based on verified capture analysis. The temperature field
 - Decode a single `.cs16` file to JSON.
 - Watch an `rtl_433 -S all` capture directory for long `.cs16` files.
 - Optionally start and supervise `rtl_433`.
-- Publish successful decodes to MQTT as JSON and as a plain temperature state.
+- Publish successful decodes to MQTT as JSON plus plain scalar state topics.
 - Log periodic capture statistics and warn when no successful decode is seen for a configured time.
 - Restart `rtl_433` automatically if the capture process exits.
+- Provide `status` and `doctor` commands for installation diagnostics.
 - Provide a systemd unit for always-on Raspberry Pi operation.
 - Include tests for confirmed protocol vectors and marker validation.
 
@@ -106,6 +107,13 @@ Check the installed version:
 inkbird-ibs-p01r-mqtt --version
 ```
 
+Check the effective config and run installation diagnostics:
+
+```bash
+inkbird-ibs-p01r-mqtt status --config /etc/inkbird-ibs-p01r/config.yaml
+inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
+```
+
 ## Local Quick Start
 
 For testing or development on a cloned checkout:
@@ -181,27 +189,37 @@ When MQTT is unavailable, the service now logs `mqtt_connect_failed` and retries
 
 ## MQTT Topics
 
-By default, every successful decode is published to two measurement topics:
+By default, every successful decode is published to these measurement topics:
 
 ```text
 sensors/inkbird_ibs_p01r/pool
 sensors/inkbird_ibs_p01r/pool/state
+sensors/inkbird_ibs_p01r/pool/field
+sensors/inkbird_ibs_p01r/pool/raw13
+sensors/inkbird_ibs_p01r/pool/confidence
+sensors/inkbird_ibs_p01r/pool/last_seen
 ```
 
-The first topic contains the full JSON payload. The `/state` topic contains only the temperature value, for example:
+The first topic contains the full JSON payload. The other topics contain plain values for ioBroker, Home Assistant, charts, and automations.
+
+The `/state` topic contains only the temperature value, for example:
 
 ```text
 24.1
 ```
 
-For ioBroker, use the `/state` topic for charts, automations, and numeric states. The JSON topic is useful for debugging and metadata.
+Set any optional topic to `null` in `config.yaml` to disable it.
 
 ## ioBroker
 
-The ioBroker MQTT adapter usually creates one object per topic. Use the numeric state topic:
+The ioBroker MQTT adapter usually creates one object per topic. Use these plain values for states, charts, and automations:
 
 ```text
 mqtt.0.sensors.inkbird_ibs_p01r.pool.state
+mqtt.0.sensors.inkbird_ibs_p01r.pool.field
+mqtt.0.sensors.inkbird_ibs_p01r.pool.raw13
+mqtt.0.sensors.inkbird_ibs_p01r.pool.confidence
+mqtt.0.sensors.inkbird_ibs_p01r.pool.last_seen
 ```
 
 The JSON topic:
@@ -210,7 +228,7 @@ The JSON topic:
 mqtt.0.sensors.inkbird_ibs_p01r.pool
 ```
 
-is useful for diagnostics because it includes `field`, `raw13`, `marker`, `confidence_count`, and the source file.
+is still useful for diagnostics because it includes `field`, `raw13`, `marker`, `confidence_count`, and the source file.
 
 If ioBroker creates `/state` as a string, delete the object once or change its object type to `number`; the next publish will carry a plain value such as `24.1`.
 
@@ -229,6 +247,20 @@ mqtt:
       unit_of_measurement: "°C"
       device_class: temperature
       state_class: measurement
+    - name: "Pool Inkbird Confidence"
+      unique_id: inkbird_ibs_p01r_pool_confidence
+      state_topic: "sensors/inkbird_ibs_p01r/pool/confidence"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+      state_class: measurement
+    - name: "Pool Inkbird Raw13"
+      unique_id: inkbird_ibs_p01r_pool_raw13
+      state_topic: "sensors/inkbird_ibs_p01r/pool/raw13"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+    - name: "Pool Inkbird Last Seen"
+      unique_id: inkbird_ibs_p01r_pool_last_seen
+      state_topic: "sensors/inkbird_ibs_p01r/pool/last_seen"
+      availability_topic: "sensors/inkbird_ibs_p01r/pool/availability"
+      device_class: timestamp
 ```
 
 The `/state` topic is the numeric sensor value. The JSON topic is attached as attributes for debugging.

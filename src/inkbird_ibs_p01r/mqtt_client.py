@@ -45,6 +45,23 @@ def build_state_payload(result: DecodeResult) -> str:
     return f"{result.temperature_C:.1f}"
 
 
+def build_auxiliary_state_payloads(result: DecodeResult, timestamp: str) -> dict[str, str]:
+    if (
+        not result.decode_ok
+        or result.field is None
+        or result.raw13 is None
+        or result.confidence_count is None
+    ):
+        raise ValueError("only successful decode results can be published")
+
+    return {
+        "field": result.field,
+        "raw13": str(result.raw13),
+        "confidence": str(result.confidence_count),
+        "last_seen": timestamp,
+    }
+
+
 class MQTTPublisher:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
@@ -115,7 +132,8 @@ class MQTTPublisher:
         if not self.is_connected:
             raise RuntimeError("MQTT client is not connected")
 
-        payload = build_mqtt_payload(result, self.config)
+        timestamp = utc_timestamp()
+        payload = build_mqtt_payload(result, self.config, timestamp=timestamp)
         info = self._client.publish(
             self.config.mqtt.topic,
             json.dumps(payload, separators=(",", ":")),
@@ -132,6 +150,24 @@ class MQTTPublisher:
                 retain=self.config.mqtt.retain,
             )
             state_info.wait_for_publish()
+
+        auxiliary_payloads = build_auxiliary_state_payloads(result, timestamp)
+        auxiliary_topics = (
+            (self.config.mqtt.field_topic, auxiliary_payloads["field"]),
+            (self.config.mqtt.raw13_topic, auxiliary_payloads["raw13"]),
+            (self.config.mqtt.confidence_topic, auxiliary_payloads["confidence"]),
+            (self.config.mqtt.last_seen_topic, auxiliary_payloads["last_seen"]),
+        )
+        for topic, value in auxiliary_topics:
+            if not topic:
+                continue
+            auxiliary_info = self._client.publish(
+                topic,
+                value,
+                qos=self.config.mqtt.qos,
+                retain=self.config.mqtt.retain,
+            )
+            auxiliary_info.wait_for_publish()
         return payload
 
     def close(self, publish_offline: bool = True) -> None:

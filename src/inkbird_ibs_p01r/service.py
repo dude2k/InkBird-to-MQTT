@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Event
 from typing import Callable
 
+from . import __version__
 from .config import AppConfig
 from .decoder import DecodeResult, decode_cs16_file
 from .mqtt_client import MQTTPublisher
@@ -16,6 +17,44 @@ from .rtl433_capture import Rtl433Capture
 LOG = logging.getLogger(__name__)
 ResultCallback = Callable[[DecodeResult], bool | None]
 SHORT_CAPTURE_REASONS = {"no_hit", "too_short", "not_long_file"}
+
+
+def log_effective_config(config: AppConfig) -> None:
+    LOG.info(
+        (
+            "effective_config version=%s device_id=%s device_name=%s "
+            "mqtt_host=%s mqtt_port=%s mqtt_topic=%s mqtt_state_topic=%s "
+            "mqtt_field_topic=%s mqtt_raw13_topic=%s mqtt_confidence_topic=%s "
+            "mqtt_last_seen_topic=%s mqtt_availability_topic=%s mqtt_username_set=%s mqtt_password_set=%s "
+            "sdr_start_rtl433=%s sdr_rtl433_path=%s sdr_device=%s sdr_frequency=%s sdr_sample_rate=%s "
+            "sdr_capture_dir=%s sdr_cleanup_after_decode=%s sdr_keep_successful_files=%s "
+            "sdr_keep_no_hit_files=%s sdr_keep_error_files=%s"
+        ),
+        __version__,
+        config.device.id,
+        config.device.name,
+        config.mqtt.host,
+        config.mqtt.port,
+        config.mqtt.topic,
+        config.mqtt.state_topic,
+        config.mqtt.field_topic,
+        config.mqtt.raw13_topic,
+        config.mqtt.confidence_topic,
+        config.mqtt.last_seen_topic,
+        config.mqtt.availability_topic,
+        config.mqtt.username is not None,
+        config.mqtt.password is not None,
+        config.sdr.start_rtl433,
+        config.sdr.rtl433_path,
+        config.sdr.device,
+        config.sdr.frequency,
+        config.sdr.sample_rate,
+        config.sdr.capture_dir,
+        config.sdr.cleanup_after_decode,
+        config.sdr.keep_successful_files,
+        config.sdr.keep_no_hit_files,
+        config.sdr.keep_error_files,
+    )
 
 
 def is_file_stable(path: Path, stable_seconds: float) -> bool:
@@ -300,6 +339,7 @@ class InkbirdService:
 
     def run(self) -> None:
         self.install_signal_handlers()
+        log_effective_config(self.config)
 
         try:
             while not self.stop_event.is_set():
