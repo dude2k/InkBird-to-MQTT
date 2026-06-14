@@ -4,36 +4,43 @@
 
 This document describes the currently reverse-engineered RF packet decoding for the Inkbird IBS-P01R floating pool thermometer.
 
-The decoder is based on IQ recordings captured with `rtl_433 -S all` and SDRplay hardware. It does not depend on rtl_433 having a native decoder for this device.
+The decoder is based on IQ recordings captured with `rtl_433 -S all` and RTL-SDR hardware. It does not depend on rtl_433 having a native decoder for this device.
 
-The current implementation decodes temperature reliably from `.cs16` IQ captures.
+The current implementation decodes temperature reliably from `.cs16` IQ captures. RTL-SDR live captures arrive as `.cu8` and are converted to `.cs16` before decoding.
 
 ## Capture Parameters
 
 Verified SDR setup:
 
 ```text
-Receiver: SDRplay RSPdx-R2
-rtl_433 device: driver=sdrplay,antenna=Antenna A
+Receiver: RTL-SDR / Nooelec
+rtl_433 device: 00000001
 Frequency: 434.097 MHz
 Sample rate: 1,000,000 samples/s
-Capture format: cs16
+Gain: 30
+Capture format from rtl_433: cu8
+Decoder input after conversion: cs16
 ```
 
 Working capture command:
 
 ```bash
 rtl_433 \
-  -d "driver=sdrplay,antenna=Antenna A" \
+  -d 00000001 \
   -f 434.097M \
   -s 1000k \
-  -S all
+  -R 0 \
+  -Y minmax \
+  -g 30 \
+  -S all \
+  -F log
 ```
 
-The `-S all` option writes IQ captures as `.cs16` files. The useful files are usually long captures of approximately:
+The `-S all` option writes RTL-SDR IQ captures as `.cu8` files. The confirmed useful test capture was:
 
 ```text
-3,145,728 bytes
+g001_434.097M_1000k.cu8
+3,014,656 bytes
 ```
 
 Short files may contain only preamble or unusable fragments.
@@ -493,7 +500,7 @@ Example payload:
   "raw13": 192,
   "marker": "2280a280",
   "confidence_count": 2,
-  "source": "rtl_433_cs16",
+  "source": "rtl433_cu8",
   "frequency_Hz": 434097000,
   "sample_rate": 1000000
 }
@@ -516,7 +523,7 @@ Example state payload:
 Human-readable live mode:
 
 ```text
-2026-06-12T12:20:00+0200 temperature_C=26.2 temperature_C_exact=26.200 field=e0c0 flags=7 raw13=192 confidence_count=2 file=g008_434.097M_1000k.cs16
+2026-06-12T12:20:00+0200 temperature_C=26.2 temperature_C_exact=26.200 field=e0c0 flags=7 raw13=192 confidence_count=2 file=g008_434.097M_1000k.cu8
 ```
 
 Machine-readable JSON mode:

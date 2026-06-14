@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 import warnings
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import yaml
 
@@ -21,15 +22,18 @@ class DeviceConfig:
 
 @dataclass(frozen=True)
 class SDRConfig:
-    mode: str = "rtl433_cs16"
-    start_rtl433: bool = False
+    mode: str = "rtl433_cu8"
+    start_rtl433: bool = True
     rtl433_path: str = "rtl_433"
-    device: str = "driver=sdrplay,antenna=Antenna A"
+    device: str = "00000001"
     frequency: str = "434.097M"
     sample_rate: str = "1000k"
+    gain: str = "30"
     capture_dir: str = "/run/inkbird-ibs-p01r/captures"
     min_long_file_size: int = 3_000_000
     cleanup_after_decode: bool = True
+    keep_cu8: bool = False
+    keep_cs16: bool = False
     keep_successful_files: bool = False
     keep_no_hit_files: bool = False
     keep_error_files: bool = True
@@ -101,6 +105,9 @@ CONFIG_SECTIONS: dict[str, type] = {
     "logging": LoggingConfig,
 }
 
+EnvCast = Callable[[str], Any]
+EnvOverride = tuple[str, str, EnvCast]
+
 
 def find_unknown_config_keys(raw: Mapping[str, Any]) -> list[str]:
     unknown: list[str] = []
@@ -147,6 +154,84 @@ def _as_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _as_optional_str(value: str) -> str | None:
+    text = value.strip()
+    if text.lower() in {"", "none", "null"}:
+        return None
+    return text
+
+
+ENV_CONFIG_MAP: tuple[tuple[str, EnvOverride], ...] = (
+    ("INKBIRD_CONFIG", ("_meta", "config_path", str)),
+    ("DEVICE_NAME", ("device", "name", str)),
+    ("DEVICE_ID", ("device", "id", str)),
+    ("DEVICE_MODEL", ("device", "model", str)),
+    ("START_RTL433", ("sdr", "start_rtl433", _as_bool)),
+    ("SDR_START_RTL433", ("sdr", "start_rtl433", _as_bool)),
+    ("RTL433_PATH", ("sdr", "rtl433_path", str)),
+    ("SDR_DEVICE", ("sdr", "device", str)),
+    ("FREQ", ("sdr", "frequency", str)),
+    ("FREQUENCY", ("sdr", "frequency", str)),
+    ("SDR_FREQUENCY", ("sdr", "frequency", str)),
+    ("SAMPLE_RATE", ("sdr", "sample_rate", str)),
+    ("SDR_SAMPLE_RATE", ("sdr", "sample_rate", str)),
+    ("GAIN", ("sdr", "gain", str)),
+    ("SDR_GAIN", ("sdr", "gain", str)),
+    ("CAPTURE_DIR", ("sdr", "capture_dir", str)),
+    ("SDR_CAPTURE_DIR", ("sdr", "capture_dir", str)),
+    ("MIN_LONG_FILE_SIZE", ("sdr", "min_long_file_size", int)),
+    ("KEEP_CU8", ("sdr", "keep_cu8", _as_bool)),
+    ("KEEP_CS16", ("sdr", "keep_cs16", _as_bool)),
+    ("CLEANUP_AFTER_DECODE", ("sdr", "cleanup_after_decode", _as_bool)),
+    ("POLL_INTERVAL_SECONDS", ("sdr", "poll_interval_seconds", float)),
+    ("FILE_STABLE_SECONDS", ("sdr", "file_stable_seconds", float)),
+    ("MQTT_HOST", ("mqtt", "host", str)),
+    ("MQTT_PORT", ("mqtt", "port", int)),
+    ("MQTT_USERNAME", ("mqtt", "username", _as_optional_str)),
+    ("MQTT_PASSWORD", ("mqtt", "password", _as_optional_str)),
+    ("MQTT_CLIENT_ID", ("mqtt", "client_id", str)),
+    ("MQTT_TOPIC", ("mqtt", "topic", str)),
+    ("MQTT_STATE_TOPIC", ("mqtt", "state_topic", _as_optional_str)),
+    ("MQTT_FIELD_TOPIC", ("mqtt", "field_topic", _as_optional_str)),
+    ("MQTT_RAW13_TOPIC", ("mqtt", "raw13_topic", _as_optional_str)),
+    ("MQTT_CONFIDENCE_TOPIC", ("mqtt", "confidence_topic", _as_optional_str)),
+    ("MQTT_LAST_SEEN_TOPIC", ("mqtt", "last_seen_topic", _as_optional_str)),
+    ("MQTT_AVAILABILITY_TOPIC", ("mqtt", "availability_topic", _as_optional_str)),
+    ("MQTT_QOS", ("mqtt", "qos", int)),
+    ("MQTT_RETAIN", ("mqtt", "retain", _as_bool)),
+    ("MQTT_TLS_ENABLED", ("mqtt", "tls_enabled", _as_bool)),
+    ("MQTT_TLS_CA_CERT", ("mqtt", "tls_ca_cert", _as_optional_str)),
+    ("MQTT_TLS_INSECURE", ("mqtt", "tls_insecure", _as_bool)),
+    ("MQTT_TLS_CLIENT_CERT", ("mqtt", "tls_client_cert", _as_optional_str)),
+    ("MQTT_TLS_CLIENT_KEY", ("mqtt", "tls_client_key", _as_optional_str)),
+    ("LOG_LEVEL", ("logging", "level", str)),
+    ("INKBIRD_LOG_LEVEL", ("logging", "level", str)),
+)
+
+
+def _environment_values(environ: Mapping[str, str]) -> dict[str, dict[str, Any]]:
+    values: dict[str, dict[str, Any]] = {}
+    for env_name, (section, key, cast) in ENV_CONFIG_MAP:
+        if section == "_meta" or env_name not in environ:
+            continue
+        values.setdefault(section, {})[key] = cast(environ[env_name])
+    return values
+
+
+def apply_environment_overrides(config: AppConfig, environ: Mapping[str, str] | None = None) -> AppConfig:
+    values = _environment_values(os.environ if environ is None else environ)
+    if not values:
+        return config
+
+    return AppConfig(
+        device=_merge_dataclass(config.device, values.get("device", {})),
+        sdr=_merge_dataclass(config.sdr, values.get("sdr", {})),
+        decoder=_merge_dataclass(config.decoder, values.get("decoder", {})),
+        mqtt=_merge_dataclass(config.mqtt, values.get("mqtt", {})),
+        logging=_merge_dataclass(config.logging, values.get("logging", {})),
+    )
+
+
 def _section_values(raw: Mapping[str, Any], section: str, config_path: Path) -> Mapping[str, Any]:
     values = raw.get(section, {})
     if values is None:
@@ -159,7 +244,9 @@ def _section_values(raw: Mapping[str, Any], section: str, config_path: Path) -> 
 def load_config(path: str | Path | None = None) -> AppConfig:
     config = AppConfig()
     if path is None:
-        return config
+        path = os.environ.get("INKBIRD_CONFIG")
+    if path is None:
+        return apply_environment_overrides(config)
 
     config_path = Path(path)
     with config_path.open("r", encoding="utf-8") as fh:
@@ -176,13 +263,14 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         sdr_values.setdefault("keep_no_hit_files", keep_failed)
         sdr_values.setdefault("keep_error_files", keep_failed)
 
-    return AppConfig(
+    config = AppConfig(
         device=_merge_dataclass(config.device, _section_values(raw, "device", config_path)),
         sdr=_merge_dataclass(config.sdr, sdr_values),
         decoder=_merge_dataclass(config.decoder, _section_values(raw, "decoder", config_path)),
         mqtt=_merge_dataclass(config.mqtt, _section_values(raw, "mqtt", config_path)),
         logging=_merge_dataclass(config.logging, _section_values(raw, "logging", config_path)),
     )
+    return apply_environment_overrides(config)
 
 
 def parse_scaled_number(value: str | int | float) -> int:

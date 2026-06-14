@@ -25,8 +25,16 @@ class Rtl433Capture:
             self.config.frequency,
             "-s",
             self.config.sample_rate,
+            "-R",
+            "0",
+            "-Y",
+            "minmax",
+            "-g",
+            str(self.config.gain),
             "-S",
             "all",
+            "-F",
+            "log",
         ]
 
     def start(self) -> None:
@@ -73,4 +81,3 @@ class Rtl433Capture:
                 self.process.kill()
                 self.process.wait(timeout=timeout)
         self.process = None
-

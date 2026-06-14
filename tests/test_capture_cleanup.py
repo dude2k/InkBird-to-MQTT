@@ -85,6 +85,64 @@ class CaptureCleanupTests(unittest.TestCase):
             self.assertEqual(results[0].reason, "too_short")
             self.assertFalse(path.exists())
 
+    def test_cu8_capture_is_converted_decoded_and_deleted(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g001_434.097M_1000k.cu8"
+            cs16_path = path.with_suffix(".cs16")
+            path.write_bytes(bytes([128, 128]) * 10)
+            config = make_config(Path(tmp), min_long_file_size=10, keep_cu8=False, keep_cs16=False)
+
+            with patch("inkbird_ibs_p01r.service.decode_cs16_file", return_value=make_result(True)) as decode:
+                results = DirectoryWatcher(config).scan_once()
+
+            self.assertEqual(results[0].file, path.name)
+            self.assertEqual(decode.call_args.args[0], cs16_path)
+            self.assertFalse(path.exists())
+            self.assertFalse(cs16_path.exists())
+
+    def test_kept_cu8_and_cs16_are_not_reprocessed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g001_434.097M_1000k.cu8"
+            cs16_path = path.with_suffix(".cs16")
+            path.write_bytes(bytes([128, 128]) * 10)
+            config = make_config(
+                Path(tmp),
+                min_long_file_size=10,
+                keep_cu8=True,
+                keep_cs16=True,
+            )
+            watcher = DirectoryWatcher(config)
+
+            with patch("inkbird_ibs_p01r.service.decode_cs16_file", return_value=make_result(True)) as decode:
+                first = watcher.scan_once()
+                second = watcher.scan_once()
+
+            self.assertEqual(len(first), 1)
+            self.assertEqual(second, [])
+            self.assertEqual(decode.call_count, 1)
+            self.assertTrue(path.exists())
+            self.assertTrue(cs16_path.exists())
+
+    def test_matching_cs16_is_skipped_when_cu8_exists(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g001_434.097M_1000k.cu8"
+            cs16_path = path.with_suffix(".cs16")
+            path.write_bytes(bytes([128, 128]) * 10)
+            cs16_path.write_bytes(b"x" * 20)
+            config = make_config(
+                Path(tmp),
+                min_long_file_size=10,
+                keep_cu8=True,
+                keep_cs16=True,
+            )
+
+            with patch("inkbird_ibs_p01r.service.decode_cs16_file", return_value=make_result(False, "no_hit")) as decode:
+                results = DirectoryWatcher(config).scan_once()
+
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].file, path.name)
+            self.assertEqual(decode.call_count, 1)
+
     def test_decode_exception_can_be_retained(self) -> None:
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "sample.cs16"

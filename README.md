@@ -2,7 +2,7 @@
 
 Python service for decoding Inkbird IBS-P01R pool thermometer RF captures and publishing the temperature to MQTT.
 
-The decoder is intended for Raspberry Pi installations that use `rtl_433 -S all` with an SDRplay RSPdx-R2. It reads `.cs16` IQ files, extracts the currently reverse-engineered Inkbird packet, decodes the temperature field, and publishes successful readings to MQTT as JSON plus plain scalar state topics.
+The decoder is intended for Raspberry Pi installations that use `rtl_433 -S all` with a Nooelec/RTL-SDR stick. `rtl_433` writes `.cu8` IQ captures for RTL-SDR hardware; the service converts them to `.cs16`, extracts the currently reverse-engineered Inkbird packet, decodes the temperature field, and publishes successful readings to MQTT as JSON plus plain scalar state topics.
 
 ## Status
 
@@ -10,8 +10,8 @@ Initial implementation based on verified capture analysis. The temperature field
 
 ## Features
 
-- Decode a single `.cs16` file to JSON.
-- Watch an `rtl_433 -S all` capture directory for long `.cs16` files.
+- Decode a single `.cu8` or `.cs16` file to JSON.
+- Watch an `rtl_433 -S all` capture directory for long `.cu8` and `.cs16` files.
 - Optionally start and supervise `rtl_433`.
 - Publish successful decodes to MQTT as JSON plus plain scalar state topics.
 - Optionally connect to MQTT over TLS/MQTTS.
@@ -33,8 +33,8 @@ sudo apt install -y git python3 python3-venv
 
 Install and verify these external runtime dependencies before starting the service:
 
-- SDRplay API for your SDRplay receiver.
-- `rtl_433` with SDRplay support.
+- RTL-SDR / Nooelec USB receiver with serial `00000001`.
+- `rtl_433` with RTL-SDR support.
 - An MQTT broker, for example Mosquitto or Home Assistant MQTT.
 
 Clone the project to the target installation directory:
@@ -62,17 +62,27 @@ Create the runtime directories and configuration:
 sudo useradd --system --home /var/lib/inkbird-ibs-p01r --shell /usr/sbin/nologin inkbird
 sudo mkdir -p /etc/inkbird-ibs-p01r /var/lib/inkbird-ibs-p01r
 sudo cp config.example.yaml /etc/inkbird-ibs-p01r/config.yaml
+sudo cp /dev/null /etc/inkbird-to-mqtt.env
 sudo chown -R inkbird:inkbird /var/lib/inkbird-ibs-p01r
 sudo chown root:root /etc/inkbird-ibs-p01r/config.yaml
+sudo chown root:root /etc/inkbird-to-mqtt.env
 ```
 
-Edit `/etc/inkbird-ibs-p01r/config.yaml` and set at least:
+Edit `/etc/inkbird-to-mqtt.env` and set at least:
 
-- `mqtt.host`
-- `mqtt.topic`
-- `sdr.device`
-- `sdr.capture_dir`, default `/run/inkbird-ibs-p01r/captures`
-- `sdr.start_rtl433: true`, if the service should start `rtl_433` itself
+```dotenv
+INKBIRD_CONFIG=/etc/inkbird-ibs-p01r/config.yaml
+SDR_DEVICE=00000001
+FREQ=434.097M
+SAMPLE_RATE=1000k
+GAIN=30
+KEEP_CU8=false
+KEEP_CS16=false
+MQTT_HOST=MQTT_BROKER_IP
+MQTT_TOPIC=sensors/inkbird_ibs_p01r/pool
+```
+
+You can also edit `/etc/inkbird-ibs-p01r/config.yaml` directly. Environment values override YAML values.
 
 Install and start the systemd service:
 
@@ -116,6 +126,8 @@ inkbird-ibs-p01r-mqtt status --config /etc/inkbird-ibs-p01r/config.yaml
 inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
 ```
 
+When `/etc/inkbird-to-mqtt.env` provides `INKBIRD_CONFIG`, the same commands can also be run without `--config`.
+
 `doctor` uses `--service-user inkbird` by default for permission hints. If your systemd unit runs as another user, pass that user explicitly:
 
 ```bash
@@ -143,7 +155,7 @@ cp config.example.yaml config.yaml
 Decode one file:
 
 ```bash
-inkbird-ibs-p01r-mqtt decode-file ./captures/g005_434.097M_1000k.cs16
+inkbird-ibs-p01r-mqtt decode-file ./captures/g001_434.097M_1000k.cu8
 ```
 
 Add `--delete-after` if a manual decode should remove the input file after the decode attempt.
@@ -167,6 +179,7 @@ If the service logs `TimeoutError: timed out` while connecting to MQTT, the conf
 Check the effective service config:
 
 ```bash
+sudo cat /etc/inkbird-to-mqtt.env
 sudo grep -A20 '^mqtt:' /etc/inkbird-ibs-p01r/config.yaml
 ```
 
@@ -193,7 +206,7 @@ Common causes:
 - The broker only listens on `localhost` instead of the LAN address.
 - Firewall rules block port `1883`.
 - The IP address in `mqtt.host` is wrong or not reachable from the Pi network.
-- Username/password are required but missing in `config.yaml`.
+- Username/password are required but missing in `config.yaml` or `/etc/inkbird-to-mqtt.env`.
 
 When MQTT is unavailable, the service now logs `mqtt_connect_failed` and retries instead of exiting.
 
@@ -308,6 +321,8 @@ For Raspberry Pi 24/7 operation, the recommended capture directory is:
 sdr:
   capture_dir: "/run/inkbird-ibs-p01r/captures"
   cleanup_after_decode: true
+  keep_cu8: false
+  keep_cs16: false
   keep_successful_files: false
   keep_no_hit_files: false
   keep_error_files: true
@@ -318,26 +333,28 @@ sdr:
   rtl433_restart_interval_seconds: 10
 ```
 
-`/run` is usually a RAM-backed tmpfs. This avoids keeping the frequent `rtl_433 -S all` `.cs16` writes on the SD card. The systemd unit creates `/run/inkbird-ibs-p01r`, and the Python service creates the `captures` subdirectory.
+`/run` is usually a RAM-backed tmpfs. This avoids keeping the frequent `rtl_433 -S all` `.cu8` writes and generated `.cs16` files on the SD card. The systemd unit creates `/run/inkbird-ibs-p01r`, and the Python service creates the `captures` subdirectory.
 
-The service deletes stable `.cs16` files after processing:
+The service deletes stable RTL-SDR `.cu8` files and generated `.cs16` files after processing:
 
-- successful decodes are deleted after MQTT publish unless `keep_successful_files: true`
-- `no_hit` captures are deleted unless `keep_no_hit_files: true`
-- short stable captures below `min_long_file_size` are treated as `too_short` and deleted unless `keep_no_hit_files: true`
-- `decode_error` captures are kept by default with `keep_error_files: true`
+- original `.cu8` captures are deleted unless `keep_cu8: true`
+- generated `.cs16` files are deleted unless `keep_cs16: true`
+- short stable `.cu8` captures below `min_long_file_size` are treated as `too_short`
+- direct legacy `.cs16` captures still honor `keep_successful_files`, `keep_no_hit_files`, and `keep_error_files`
 
 For debugging, use a persistent directory and enable retention:
 
 ```yaml
 sdr:
   capture_dir: "/var/lib/inkbird-ibs-p01r/captures"
+  keep_cu8: true
+  keep_cs16: true
   keep_successful_files: true
   keep_no_hit_files: true
   keep_error_files: true
 ```
 
-The service also removes stale captures older than `max_capture_age_seconds` and enforces `max_capture_dir_size_mb` by deleting the oldest `.cs16` files first.
+The service also removes stale captures older than `max_capture_age_seconds` and enforces `max_capture_dir_size_mb` by deleting the oldest `.cu8` or `.cs16` files first.
 
 Older configs with `keep_failed_files` are still accepted. If the new `keep_no_hit_files` and `keep_error_files` settings are absent, `keep_failed_files` is mapped to both of them.
 
@@ -361,7 +378,7 @@ It also warns when no successful decode has been published for `no_successful_de
   "raw13": 192,
   "confidence_count": 2,
   "marker": "2280a280",
-  "file": "g005_434.097M_1000k.cs16"
+  "file": "g001_434.097M_1000k.cu8"
 }
 ```
 
@@ -371,7 +388,7 @@ Non-decodable long captures are expected with this capture method:
 {
   "decode_ok": false,
   "reason": "no_hit",
-  "file": "g006_434.097M_1000k.cs16"
+  "file": "g002_434.097M_1000k.cu8"
 }
 ```
 
@@ -381,13 +398,26 @@ The known-good capture command is:
 
 ```bash
 rtl_433 \
-  -d "driver=sdrplay,antenna=Antenna A" \
+  -d 00000001 \
   -f 434.097M \
   -s 1000k \
-  -S all
+  -R 0 \
+  -Y minmax \
+  -g 30 \
+  -S all \
+  -F log
 ```
 
-Useful long captures are usually around `3,145,728` bytes. The default long-file threshold is `3,000,000` bytes.
+The center frequency is intentionally `434.097M`, even though the sensor is around 433.92 MHz, because the decoder expects the FSK tones relative to the SDR center around -177 kHz.
+
+The confirmed RTL-SDR test capture was `g001_434.097M_1000k.cu8` with about `3,014,656` bytes. The default long-file threshold is `3,000,000` bytes.
+
+Troubleshooting quick map:
+
+- `captures=0`: antenna, receiver placement, permissions, serial selection, or sensor range problem.
+- `FAIL:no_hit`: a long capture was present, but likely contained a foreign signal or fragment.
+- `decode_ok=true`: a valid Inkbird frame was decoded.
+- `clip_pct > 0`: reduce `GAIN`.
 
 ## Tests
 
@@ -407,6 +437,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Changelog
 
+- `0.6.0`: Switch live capture defaults to RTL-SDR `.cu8`, add cu8-to-cs16 conversion, env overrides, and updated systemd setup.
 - `0.5.0`: Add config typo warnings and clearer `doctor` service-user permission hints.
 - `0.4.0`: Add optional MQTT over TLS/MQTTS support and TLS checks in `doctor`.
 - `0.3.0`: Add scalar MQTT topics, `status`/`doctor`, startup effective-config logging, and GitHub Actions CI.

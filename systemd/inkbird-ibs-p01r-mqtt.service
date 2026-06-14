@@ -10,8 +10,9 @@ Group=inkbird
 RuntimeDirectory=inkbird-ibs-p01r
 RuntimeDirectoryMode=0755
 WorkingDirectory=/opt/inkbird-ibs-p01r-mqtt
-ExecStart=/opt/inkbird-ibs-p01r-mqtt/.venv/bin/inkbird-ibs-p01r-mqtt run --config /etc/inkbird-ibs-p01r/config.yaml
-Restart=always
+EnvironmentFile=-/etc/inkbird-to-mqtt.env
+ExecStart=/opt/inkbird-ibs-p01r-mqtt/.venv/bin/inkbird-ibs-p01r-mqtt run
+Restart=on-failure
 RestartSec=5
 
 [Install]

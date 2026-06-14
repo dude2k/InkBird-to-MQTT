@@ -4,6 +4,7 @@ import logging
 import signal
 import time
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from threading import Event
 from typing import Callable
@@ -11,12 +12,14 @@ from typing import Callable
 from . import __version__
 from .config import AppConfig
 from .decoder import DecodeResult, decode_cs16_file
+from .iq import convert_cu8_to_cs16
 from .mqtt_client import MQTTPublisher
 from .rtl433_capture import Rtl433Capture
 
 LOG = logging.getLogger(__name__)
 ResultCallback = Callable[[DecodeResult], bool | None]
 SHORT_CAPTURE_REASONS = {"no_hit", "too_short", "not_long_file"}
+CAPTURE_PATTERNS = ("g*.cu8", "*.cs16")
 
 
 def log_effective_config(config: AppConfig) -> None:
@@ -29,8 +32,9 @@ def log_effective_config(config: AppConfig) -> None:
             "mqtt_tls_enabled=%s mqtt_tls_ca_cert=%s mqtt_tls_insecure=%s "
             "mqtt_tls_client_cert=%s mqtt_tls_client_key_set=%s "
             "sdr_start_rtl433=%s sdr_rtl433_path=%s sdr_device=%s sdr_frequency=%s sdr_sample_rate=%s "
+            "sdr_gain=%s "
             "sdr_capture_dir=%s sdr_cleanup_after_decode=%s sdr_keep_successful_files=%s "
-            "sdr_keep_no_hit_files=%s sdr_keep_error_files=%s"
+            "sdr_keep_no_hit_files=%s sdr_keep_error_files=%s sdr_keep_cu8=%s sdr_keep_cs16=%s"
         ),
         __version__,
         config.device.id,
@@ -56,11 +60,14 @@ def log_effective_config(config: AppConfig) -> None:
         config.sdr.device,
         config.sdr.frequency,
         config.sdr.sample_rate,
+        config.sdr.gain,
         config.sdr.capture_dir,
         config.sdr.cleanup_after_decode,
         config.sdr.keep_successful_files,
         config.sdr.keep_no_hit_files,
         config.sdr.keep_error_files,
+        config.sdr.keep_cu8,
+        config.sdr.keep_cs16,
     )
 
 
@@ -77,16 +84,37 @@ def is_file_stable(path: Path, stable_seconds: float) -> bool:
     return first_stat.st_size == second_stat.st_size and first_stat.st_mtime_ns == second_stat.st_mtime_ns
 
 
+def iter_capture_paths(capture_dir: Path) -> list[Path]:
+    if not capture_dir.exists():
+        return []
+
+    paths: dict[Path, Path] = {}
+    for pattern in CAPTURE_PATTERNS:
+        for item in capture_dir.glob(pattern):
+            paths[item.resolve()] = item
+    return list(paths.values())
+
+
 def capture_files(capture_dir: Path) -> list[Path]:
     if not capture_dir.exists():
         return []
     files = []
-    for item in capture_dir.glob("*.cs16"):
+    for item in iter_capture_paths(capture_dir):
+        if item.suffix.lower() == ".cs16" and item.with_suffix(".cu8").exists():
+            continue
         try:
             files.append((item.stat().st_mtime, item))
         except FileNotFoundError:
             continue
     return [item for _, item in sorted(files)]
+
+
+def capture_signature(path: Path) -> tuple[Path, int, int] | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return (path.resolve(), stat.st_mtime_ns, stat.st_size)
 
 
 def cleanup_capture_file(path: Path, result: DecodeResult, config: AppConfig) -> bool:
@@ -118,13 +146,93 @@ def cleanup_capture_file(path: Path, result: DecodeResult, config: AppConfig) ->
         return False
 
 
+def cleanup_converted_capture_files(
+    cu8_path: Path,
+    cs16_path: Path | None,
+    result: DecodeResult,
+    config: AppConfig,
+) -> list[Path]:
+    paths = [(cu8_path, config.sdr.keep_cu8, "cu8")]
+    if cs16_path is not None:
+        paths.append((cs16_path, config.sdr.keep_cs16, "cs16"))
+
+    kept: list[Path] = []
+    if not config.sdr.cleanup_after_decode:
+        for path, _keep, kind in paths:
+            if path.exists():
+                LOG.debug("capture_kept cleanup_disabled kind=%s file=%s", kind, path.name)
+                kept.append(path)
+        return kept
+
+    reason = result.reason or "success"
+    for path, keep, kind in paths:
+        if not path.exists():
+            continue
+        if keep:
+            LOG.debug("capture_kept kind=%s file=%s reason=%s", kind, path.name, reason)
+            kept.append(path)
+            continue
+        try:
+            path.unlink()
+            LOG.debug("capture_deleted kind=%s file=%s reason=%s decode_ok=%s", kind, path.name, reason, result.decode_ok)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            LOG.warning("capture_delete_failed kind=%s file=%s error=%s", kind, path, exc)
+            if path.exists():
+                kept.append(path)
+    return kept
+
+
+def decode_capture_file(path: Path, config: AppConfig, min_file_size: int | None = None) -> tuple[DecodeResult, Path | None]:
+    limit = config.sdr.min_long_file_size if min_file_size is None else min_file_size
+    file_path = Path(path)
+    try:
+        size = file_path.stat().st_size
+    except FileNotFoundError:
+        return DecodeResult(False, file_path.name, reason="file_missing"), None
+
+    if limit and size < limit:
+        return DecodeResult(False, file_path.name, reason="too_short"), None
+
+    if file_path.suffix.lower() == ".cu8":
+        cs16_path = file_path.with_suffix(".cs16")
+        try:
+            convert_cu8_to_cs16(file_path, cs16_path)
+        except Exception:
+            LOG.exception("cu8_convert_exception file=%s", file_path.name)
+            return DecodeResult(False, file_path.name, reason="decode_error"), cs16_path
+
+        try:
+            result = decode_cs16_file(
+                cs16_path,
+                decoder_config=config.decoder,
+                min_file_size=limit,
+            )
+        except Exception:
+            LOG.exception("decode_exception file=%s", cs16_path.name)
+            result = DecodeResult(False, cs16_path.name, reason="decode_error")
+        return replace(result, file=file_path.name), cs16_path
+
+    try:
+        result = decode_cs16_file(
+            file_path,
+            decoder_config=config.decoder,
+            min_file_size=limit,
+        )
+    except Exception:
+        LOG.exception("decode_exception file=%s", file_path.name)
+        result = DecodeResult(False, file_path.name, reason="decode_error")
+    return result, None
+
+
 def cleanup_old_captures(capture_dir: Path, max_age_seconds: int | None) -> int:
     if not max_age_seconds or max_age_seconds <= 0 or not capture_dir.exists():
         return 0
 
     deleted = 0
     now = time.time()
-    for path in capture_dir.glob("*.cs16"):
+    for path in iter_capture_paths(capture_dir):
         try:
             age = now - path.stat().st_mtime
             if age <= max_age_seconds:
@@ -145,7 +253,7 @@ def enforce_capture_dir_size(capture_dir: Path, max_size_mb: int | None, active_
 
     files: list[tuple[float, int, Path]] = []
     now = time.time()
-    for path in capture_dir.glob("*.cs16"):
+    for path in iter_capture_paths(capture_dir):
         try:
             stat = path.stat()
             files.append((stat.st_mtime, stat.st_size, path))
@@ -192,7 +300,6 @@ class DirectoryWatcher:
         self._run_safety_cleanup(capture_dir)
 
         for path in capture_files(capture_dir):
-            resolved = path.resolve()
             try:
                 size = path.stat().st_size
             except FileNotFoundError:
@@ -208,7 +315,7 @@ class DirectoryWatcher:
                 stable_stat = path.stat()
             except FileNotFoundError:
                 continue
-            signature = (resolved, stable_stat.st_mtime_ns, stable_stat.st_size)
+            signature = (path.resolve(), stable_stat.st_mtime_ns, stable_stat.st_size)
             if signature in self.seen:
                 continue
             size = stable_stat.st_size
@@ -220,17 +327,8 @@ class DirectoryWatcher:
                     size,
                     self.config.sdr.min_long_file_size,
                 )
-                result = DecodeResult(False, path.name, reason="too_short")
-            else:
-                try:
-                    result = decode_cs16_file(
-                        path,
-                        decoder_config=self.config.decoder,
-                        min_file_size=self.config.sdr.min_long_file_size,
-                    )
-                except Exception:
-                    LOG.exception("decode_exception file=%s", path.name)
-                    result = DecodeResult(False, path.name, reason="decode_error")
+
+            result, generated_cs16_path = decode_capture_file(path, self.config)
             self._log_result(result)
             results.append(result)
             self._record_result(result)
@@ -245,11 +343,23 @@ class DirectoryWatcher:
                 LOG.warning("decode_delivery_deferred file=%s", result.file)
                 continue
 
-            if cleanup_capture_file(path, result, self.config):
+            kept_paths: list[Path] = []
+            if path.suffix.lower() == ".cu8":
+                kept_paths = cleanup_converted_capture_files(path, generated_cs16_path, result, self.config)
+                if not kept_paths:
+                    self.stats["deleted"] += 1
+                else:
+                    self.stats["kept"] += 1
+            elif cleanup_capture_file(path, result, self.config):
                 self.stats["deleted"] += 1
             else:
-                self.seen.add(signature)
+                kept_paths = [path]
                 self.stats["kept"] += 1
+
+            for kept_path in kept_paths:
+                kept_signature = capture_signature(kept_path)
+                if kept_signature is not None:
+                    self.seen.add(kept_signature)
 
         self._maybe_log_stats()
         return results

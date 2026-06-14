@@ -25,8 +25,8 @@ Example payload:
   "confidence_count": 2,
   "frequency_Hz": 434097000,
   "sample_rate": 1000000,
-  "source": "rtl_433_cs16",
-  "source_file": "g005_434.097M_1000k.cs16",
+  "source": "rtl433_cu8",
+  "source_file": "g001_434.097M_1000k.cu8",
   "timestamp": "2026-06-12T12:20:00+02:00"
 }
 ```

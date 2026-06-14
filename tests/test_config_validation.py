@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 from inkbird_ibs_p01r.config import ConfigWarning, find_unknown_config_keys, load_config
 
@@ -53,6 +55,32 @@ unexpected: true
 
     def test_legacy_keep_failed_files_is_still_known(self) -> None:
         self.assertEqual(find_unknown_config_keys({"sdr": {"keep_failed_files": True}}), [])
+
+    def test_environment_overrides_defaults(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "SDR_DEVICE": "00000001",
+                "FREQ": "434.097M",
+                "SAMPLE_RATE": "1000k",
+                "GAIN": "30",
+                "KEEP_CU8": "false",
+                "KEEP_CS16": "true",
+                "MQTT_HOST": "mqtt.local",
+                "MQTT_TOPIC": "sensors/pool/inkbird",
+            },
+            clear=True,
+        ):
+            config = load_config()
+
+        self.assertEqual(config.sdr.device, "00000001")
+        self.assertEqual(config.sdr.frequency, "434.097M")
+        self.assertEqual(config.sdr.sample_rate, "1000k")
+        self.assertEqual(config.sdr.gain, "30")
+        self.assertFalse(config.sdr.keep_cu8)
+        self.assertTrue(config.sdr.keep_cs16)
+        self.assertEqual(config.mqtt.host, "mqtt.local")
+        self.assertEqual(config.mqtt.topic, "sensors/pool/inkbird")
 
 
 if __name__ == "__main__":

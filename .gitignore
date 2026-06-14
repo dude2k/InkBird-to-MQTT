@@ -6,8 +6,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.testdeps/
 
 captures/
+*.cu8
 *.cs16
 
 .env

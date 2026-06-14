@@ -10,7 +10,7 @@ from threading import Event
 
 from . import __version__
 from .config import load_config
-from .decoder import DecodeResult, decode_cs16_file
+from .decoder import DecodeResult
 from .diagnostics import (
     effective_config_lines,
     exit_code_for_results,
@@ -19,7 +19,13 @@ from .diagnostics import (
     run_status_checks,
 )
 from .mqtt_client import MQTTPublisher
-from .service import DirectoryWatcher, InkbirdService, cleanup_capture_file
+from .service import (
+    DirectoryWatcher,
+    InkbirdService,
+    cleanup_capture_file,
+    cleanup_converted_capture_files,
+    decode_capture_file,
+)
 
 
 def configure_logging(level: str) -> None:
@@ -38,21 +44,23 @@ def print_result(result: DecodeResult, pretty: bool = False) -> None:
 
 def command_decode_file(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    result = decode_cs16_file(
-        args.file,
-        decoder_config=config.decoder,
-        min_file_size=args.min_long_file_size,
-    )
+    result, generated_cs16_path = decode_capture_file(args.file, config, min_file_size=args.min_long_file_size)
     print_result(result, pretty=args.pretty)
     if args.delete_after:
         sdr = replace(
             config.sdr,
             cleanup_after_decode=True,
+            keep_cu8=False,
+            keep_cs16=False,
             keep_successful_files=False,
             keep_no_hit_files=False,
             keep_error_files=False,
         )
-        cleanup_capture_file(args.file, result, replace(config, sdr=sdr))
+        cleanup_config = replace(config, sdr=sdr)
+        if args.file.suffix.lower() == ".cu8":
+            cleanup_converted_capture_files(args.file, generated_cs16_path, result, cleanup_config)
+        else:
+            cleanup_capture_file(args.file, result, cleanup_config)
     return 0
 
 
@@ -138,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"inkbird-ibs-p01r-mqtt {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    decode = subparsers.add_parser("decode-file", help="decode one rtl_433 .cs16 file")
+    decode = subparsers.add_parser("decode-file", help="decode one rtl_433 .cu8 or .cs16 file")
     decode.add_argument("file", type=Path)
     decode.add_argument("--config", type=Path, default=None)
     decode.add_argument("--min-long-file-size", type=int, default=0)
@@ -146,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     decode.add_argument("--pretty", action="store_true")
     decode.set_defaults(func=command_decode_file)
 
-    watch = subparsers.add_parser("watch-dir", help="watch a capture directory and decode long .cs16 files")
+    watch = subparsers.add_parser("watch-dir", help="watch a capture directory and decode long .cu8 or .cs16 files")
     watch.add_argument("directory", type=Path)
     watch.add_argument("--config", type=Path, default=None)
     watch.add_argument("--poll-interval", type=float, default=1.0)
@@ -154,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     watch.set_defaults(func=command_watch_dir)
 
     run = subparsers.add_parser("run", help="run the MQTT service")
-    run.add_argument("--config", type=Path, required=True)
+    run.add_argument("--config", type=Path, default=None)
     run.set_defaults(func=command_run)
 
     test_mqtt = subparsers.add_parser("test-mqtt", help="publish one synthetic decode payload")
@@ -162,11 +170,11 @@ def build_parser() -> argparse.ArgumentParser:
     test_mqtt.set_defaults(func=command_test_mqtt)
 
     status = subparsers.add_parser("status", help="show effective config and lightweight runtime checks")
-    status.add_argument("--config", type=Path, required=True)
+    status.add_argument("--config", type=Path, default=None)
     status.set_defaults(func=command_status)
 
     doctor = subparsers.add_parser("doctor", help="run deeper checks for MQTT, capture directory, and rtl_433")
-    doctor.add_argument("--config", type=Path, required=True)
+    doctor.add_argument("--config", type=Path, default=None)
     doctor.add_argument(
         "--service-user",
         default="inkbird",
