@@ -62,27 +62,20 @@ Create the runtime directories and configuration:
 sudo useradd --system --home /var/lib/inkbird-ibs-p01r --shell /usr/sbin/nologin inkbird
 sudo mkdir -p /etc/inkbird-ibs-p01r /var/lib/inkbird-ibs-p01r
 sudo cp config.example.yaml /etc/inkbird-ibs-p01r/config.yaml
-sudo cp /dev/null /etc/inkbird-to-mqtt.env
 sudo chown -R inkbird:inkbird /var/lib/inkbird-ibs-p01r
 sudo chown root:root /etc/inkbird-ibs-p01r/config.yaml
-sudo chown root:root /etc/inkbird-to-mqtt.env
 ```
 
-Edit `/etc/inkbird-to-mqtt.env` and set at least:
+Edit `/etc/inkbird-ibs-p01r/config.yaml` and set at least:
 
-```dotenv
-INKBIRD_CONFIG=/etc/inkbird-ibs-p01r/config.yaml
-SDR_DEVICE=00000001
-FREQ=434.097M
-SAMPLE_RATE=1000k
-GAIN=30
-KEEP_CU8=false
-KEEP_CS16=false
-MQTT_HOST=MQTT_BROKER_IP
-MQTT_TOPIC=sensors/inkbird_ibs_p01r/pool
-```
-
-You can also edit `/etc/inkbird-ibs-p01r/config.yaml` directly. Environment values override YAML values.
+- `mqtt.host`
+- `mqtt.topic`
+- `sdr.device: "00000001"`
+- `sdr.frequency: "434.097M"`
+- `sdr.sample_rate: "1000k"`
+- `sdr.gain: "30"`
+- `sdr.capture_dir`, default `/run/inkbird-ibs-p01r/captures`
+- `sdr.start_rtl433: true`
 
 Install and start the systemd service:
 
@@ -125,8 +118,6 @@ Check the effective config and run installation diagnostics:
 inkbird-ibs-p01r-mqtt status --config /etc/inkbird-ibs-p01r/config.yaml
 inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
 ```
-
-When `/etc/inkbird-to-mqtt.env` provides `INKBIRD_CONFIG`, the same commands can also be run without `--config`.
 
 `doctor` uses `--service-user inkbird` by default for permission hints. If your systemd unit runs as another user, pass that user explicitly:
 
@@ -179,7 +170,6 @@ If the service logs `TimeoutError: timed out` while connecting to MQTT, the conf
 Check the effective service config:
 
 ```bash
-sudo cat /etc/inkbird-to-mqtt.env
 sudo grep -A20 '^mqtt:' /etc/inkbird-ibs-p01r/config.yaml
 ```
 
@@ -206,7 +196,7 @@ Common causes:
 - The broker only listens on `localhost` instead of the LAN address.
 - Firewall rules block port `1883`.
 - The IP address in `mqtt.host` is wrong or not reachable from the Pi network.
-- Username/password are required but missing in `config.yaml` or `/etc/inkbird-to-mqtt.env`.
+- Username/password are required but missing in `config.yaml`.
 
 When MQTT is unavailable, the service now logs `mqtt_connect_failed` and retries instead of exiting.
 

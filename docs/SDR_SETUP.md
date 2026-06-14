@@ -65,8 +65,7 @@ For debugging, a persistent directory can be used instead:
 
 ## Configuration
 
-YAML configuration and environment variables can be combined. Environment values
-override YAML values.
+The normal service configuration lives in `/etc/inkbird-ibs-p01r/config.yaml`.
 
 ```yaml
 sdr:
@@ -82,18 +81,9 @@ sdr:
   keep_cs16: false
 ```
 
-Equivalent systemd environment file entries:
-
-```dotenv
-SDR_DEVICE=00000001
-FREQ=434.097M
-SAMPLE_RATE=1000k
-GAIN=30
-KEEP_CU8=false
-KEEP_CS16=false
-MQTT_HOST=192.168.1.10
-MQTT_TOPIC=sensors/inkbird_ibs_p01r/pool
-```
+Environment variables such as `SDR_DEVICE`, `FREQ`, `SAMPLE_RATE`, `GAIN`,
+`KEEP_CU8`, and `KEEP_CS16` are supported for manual tests or custom systemd
+drop-ins, but they are not needed for the default unit.
 
 ## Long Files
 
@@ -151,9 +141,6 @@ Run deeper checks for MQTT TCP reachability, capture directory access, and the
 ```bash
 inkbird-ibs-p01r-mqtt doctor --config /etc/inkbird-ibs-p01r/config.yaml
 ```
-
-Both commands can also run without `--config` when values are supplied by the
-environment or `/etc/inkbird-to-mqtt.env` through systemd.
 
 Unknown config keys are reported as warnings to make configuration typos visible.
 
